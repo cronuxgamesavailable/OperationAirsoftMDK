@@ -1,0 +1,11 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.ModPackager.cpp.obj": [
+			"ModPackager.cpp.obj",
+			"ModPackagerCommands.cpp.obj",
+			"ModPackagerStyle.cpp.obj",
+			"SModPackagerWindow.cpp.obj"
+		]
+	}
+}
