@@ -1,0 +1,11 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.CookContent.cpp.obj": [
+			"CookContent.cpp.obj",
+			"CookContentCommands.cpp.obj",
+			"CookContentStyle.cpp.obj",
+			"SCookContentWindow.cpp.obj"
+		]
+	}
+}
