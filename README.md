@@ -13,6 +13,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** – a po
 - ✅ **Mod Packaging UI** – Built directly into the UE5 Editor
 - 🔍 **Auto Asset Detection** – Automatically lists available Maps and Meshes
 - 📁 **Clean Output Structure** – Copies cooked files and metadata into organized mod folders
+- 🔥 **Cooking Support** – Cook selected assets before packaging directly from the UI  
 - ⚙️ **Support for Multiple Mod Types** – Maps, Layouts, Gun Parts, and more
 
 ---
@@ -29,6 +30,7 @@ These are planned or upcoming features for the MDK:
 - 🗺️ Layout editor: place spawn points, objectives, and flags visually
 - 💬 Localization/translation support for mod metadata
 - 📚 Add mod documentation export option (auto-create README/template)
+- 📂 Automatically copy cooked assets from the Cooked directory into the final mod folder
 
 ---
 
