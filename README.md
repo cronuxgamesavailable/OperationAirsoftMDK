@@ -30,7 +30,6 @@ These are planned or upcoming features for the MDK:
 - 🗺️ Layout editor: place spawn points, objectives, and flags visually
 - 💬 Localization/translation support for mod metadata
 - 📚 Add mod documentation export option (auto-create README/template)
-- 📂 Automatically copy cooked assets from the Cooked directory into the final mod folder
 
 ---
 
