@@ -7,7 +7,9 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** – a po
 > This is **not** the full game or a standalone modding environment.
 
 > *Install Guide*
+
 > Find Project Root (Where the .uproject is)
+
 > Copy the **ModCreator** into ProjectRoot/Plugins/
 ---
 
