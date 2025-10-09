@@ -6,11 +6,6 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** – a po
 > You can integrate it into your own Unreal Engine 5.4 project to enable mod packaging features.  
 > This is **not** the full game or a standalone modding environment.
 
-> *Install Guide*
-
-> Find Project Root (Where the .uproject is)
-
-> Copy the **ModCreator** into ProjectRoot/Plugins/
 ---
 
 ## 📦 Features
@@ -35,6 +30,16 @@ These are planned or upcoming features for the MDK:
 - 🗺️ Layout editor: place spawn points, objectives, and flags visually
 - 💬 Localization/translation support for mod metadata
 - 📚 Add mod documentation export option (auto-create README/template)
+
+---
+
+## 📥 Install Guide
+
+Follow these simple steps to set up the MDK in your Unreal Engine project:
+
+1. **Find your Project Root** – This is the folder containing your `.uproject` file.  
+2. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
+3. **Restart Unreal Engine** – The plugin will appear in the Editor under the Mod Tools section.
 
 ---
 
