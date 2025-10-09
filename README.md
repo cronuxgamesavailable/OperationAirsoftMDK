@@ -5,6 +5,8 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** – a po
 > ⚠️ **Note:** This repository contains *only the plugin*.  
 > You can integrate it into your own Unreal Engine 5.4 project to enable mod packaging features.  
 > This is **not** the full game or a standalone modding environment.
+> Install the plugin (ModCreator) into projectroot/Plugins/
+
 
 ---
 
