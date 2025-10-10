@@ -32,7 +32,7 @@ namespace
         return IFileManager::Get().Copy(*Dst, *Src) == ECopyResult::COPY_OK;
     }
 
-    // Update / create modinfo.json with the chosen ModName + Description
+    // Update / create modinfo.json with ModName, Description, and ProjectName
     bool UpdateModInfoJson(const FString& ModInfoPath, const FString& ModName, const FString& Description)
     {
         FString In;
@@ -51,10 +51,18 @@ namespace
             Root = MakeShared<FJsonObject>();
         }
 
+        // Update fields
         Root->SetStringField(TEXT("ModName"), ModName);
         if (!Description.IsEmpty())
         {
             Root->SetStringField(TEXT("Description"), Description);
+        }
+
+        // Include current project name
+        FString ProjectName = FApp::GetProjectName();
+        if (!ProjectName.IsEmpty())
+        {
+            Root->SetStringField(TEXT("ProjectName"), ProjectName);
         }
 
         FString Out;
