@@ -1,0 +1,9 @@
+{
+  "ModName": "Base Mod",
+  "Description": "An empty mod template.",
+  "Thumbnail": "Thumbnail.png",
+  "MainMap": "",
+  "Assets": [],
+  "LayoutsEnabled": false,
+  "Layouts": []
+}

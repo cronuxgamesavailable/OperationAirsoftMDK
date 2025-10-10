@@ -1,0 +1,9 @@
+{
+  "ModName": "Attachment Mod",
+  "Description": "A weapon attachment mod template.",
+  "Thumbnail": "Thumbnail.png",
+  "MainMap": "",
+  "Assets": [],
+  "LayoutsEnabled": false,
+  "Layouts": []
+}
