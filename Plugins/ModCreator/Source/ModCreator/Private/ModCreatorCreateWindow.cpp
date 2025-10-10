@@ -20,6 +20,7 @@
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformFileManager.h"
+#include "ModCreatorStyle.h"
 
 const FName FModCreatorCreateWindow::TabName(TEXT("ModCreator_CreateTab"));
 
@@ -32,8 +33,66 @@ namespace
         return IFileManager::Get().Copy(*Dst, *Src) == ECopyResult::COPY_OK;
     }
 
-    // Update / create modinfo.json with ModName, Description, and ProjectName
-    bool UpdateModInfoJson(const FString& ModInfoPath, const FString& ModName, const FString& Description)
+    // --- NEW: scan for .umap files inside this plugin's Content and write them into Root["Assets"].
+    static void PopulateAssetsWithMaps(TSharedPtr<FJsonObject>& Root, const FString& PluginDir, const FString& ModName)
+    {
+        const FString ContentDir = PluginDir / TEXT("Content");
+        if (!FPaths::DirectoryExists(ContentDir))
+        {
+            // nothing to do
+            return;
+        }
+
+        // Gather all .umap files
+        TArray<FString> MapFiles;
+        IFileManager::Get().FindFilesRecursive(MapFiles, *ContentDir, TEXT("*.umap"), /*Files*/true, /*Directories*/false);
+
+        // Build (or replace) the Assets array
+        TArray<TSharedPtr<FJsonValue>> AssetsArray;
+
+        for (const FString& AbsPath : MapFiles)
+        {
+            // Build plugin-relative path under Content/
+            FString Rel = AbsPath;
+            FPaths::NormalizeFilename(Rel);
+
+            FString ContentNorm = ContentDir;
+            FPaths::NormalizeDirectoryName(ContentNorm);
+            if (Rel.StartsWith(ContentNorm + TEXT("/")))
+            {
+                Rel = Rel.Mid(ContentNorm.Len() + 1); // e.g. "Maps/Arena01.umap"
+            }
+
+            const FString AssetName = FPaths::GetBaseFilename(Rel);               // "Arena01"
+            const FString RelNoExt = FPaths::GetBaseFilename(Rel, false);        // also "Arena01"
+            const FString RelDir = FPaths::GetPath(Rel);                       // "Maps"
+
+            // For content-only plugins, the mount point is "/<PluginName>/..."
+            // We’ll use the ModName as the mount root (matches Content-only plugin mount).
+            FString MountPath = FString::Printf(TEXT("/%s/"), *ModName);
+            if (!RelDir.IsEmpty())
+            {
+                MountPath += RelDir + TEXT("/");
+            }
+
+            // Simplified: store only map names (no path)
+            const FString AssetRef = MountPath + AssetName + TEXT(".") + AssetName;
+
+            // {"Type":"Map","Name":"Arena01"}
+            TSharedPtr<FJsonObject> MapObj = MakeShared<FJsonObject>();
+            MapObj->SetStringField(TEXT("Type"), TEXT("Map"));
+            MapObj->SetStringField(TEXT("Name"), AssetName);
+
+            AssetsArray.Add(MakeShared<FJsonValueObject>(MapObj));
+        }
+
+        // Write back to Root
+        Root->SetArrayField(TEXT("Assets"), AssetsArray);
+    }
+
+    // --- UPDATED: Remove MainMap and auto-populate Assets with maps found in this plugin.
+    // Pass PluginDir so we can scan its Content folder.
+    bool UpdateModInfoJson(const FString& ModInfoPath, const FString& ModName, const FString& Description, const FString& PluginDir)
     {
         FString In;
         TSharedPtr<FJsonObject> Root;
@@ -51,7 +110,7 @@ namespace
             Root = MakeShared<FJsonObject>();
         }
 
-        // Update fields
+        // Update basic fields
         Root->SetStringField(TEXT("ModName"), ModName);
         if (!Description.IsEmpty())
         {
@@ -59,10 +118,34 @@ namespace
         }
 
         // Include current project name
-        FString ProjectName = FApp::GetProjectName();
+        const FString ProjectName = FApp::GetProjectName();
         if (!ProjectName.IsEmpty())
         {
             Root->SetStringField(TEXT("ProjectName"), ProjectName);
+        }
+
+        // ✅ Remove "MainMap" (schema change)
+        Root->RemoveField(TEXT("MainMap"));
+
+        // ✅ Auto-populate Assets with all maps in this plugin
+        PopulateAssetsWithMaps(Root, PluginDir, ModName);
+
+        // (Optional) ensure arrays exist even if empty
+        if (!Root->HasField(TEXT("LayoutsEnabled")))
+        {
+            Root->SetBoolField(TEXT("LayoutsEnabled"), false);
+        }
+        if (!Root->HasField(TEXT("Layouts")))
+        {
+            Root->SetArrayField(TEXT("Layouts"), {});
+        }
+        if (!Root->HasField(TEXT("Thumbnail")))
+        {
+            Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
+        }
+        if (!Root->HasField(TEXT("BuildRequirements")))
+        {
+            Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
         }
 
         FString Out;
@@ -82,12 +165,15 @@ void FModCreatorCreateWindow::Register()
         TabName,
         FOnSpawnTab::CreateStatic(&FModCreatorCreateWindow::SpawnTab)
     )
-        .SetDisplayName(NSLOCTEXT("ModCreator", "CreateTabTitle", "New Game Mod"))
+        .SetDisplayName(NSLOCTEXT("ModCreator", "CreateTabTitle", "Create Mod"))
         .SetTooltipText(NSLOCTEXT("ModCreator", "CreateTabTooltip", "Create a new mod"))
-        .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.GameSettings"))
+        // Use our custom plus icon (small + large variants from the style set)
+        .SetIcon(FSlateIcon(
+            FModCreatorStyle::GetStyleSetName(),
+            "ModCreator.Create.Small",
+            "ModCreator.Create.Large"))
         .SetMenuType(ETabSpawnerMenuType::Hidden);
 }
-
 
 void FModCreatorCreateWindow::Unregister()
 {
@@ -359,7 +445,7 @@ bool SModCreatorCreatePanel::CreatePluginFromTemplate(const FString& TemplateDir
     // Content copy — optionally include maps
     const FString SrcContent = TemplateDir / TEXT("Content");
     const FString DstContent = DestPluginDir / TEXT("Content");
-    const bool bIncludeMaps = ReadTemplateRequiresBuildMap(TemplateDir);
+    const bool bIncludeMaps = ReadTemplateRequiresCopyContent(TemplateDir);
 
     if (FM.DirectoryExists(*SrcContent))
     {
@@ -425,13 +511,13 @@ bool SModCreatorCreatePanel::CreatePluginFromTemplate(const FString& TemplateDir
 
         if (!ModInfoDst.IsEmpty())
         {
-            if (!UpdateModInfoJson(ModInfoDst, ModName, Description))
+            if (!UpdateModInfoJson(ModInfoDst, ModName, Description, DestPluginDir))
             {
-                UE_LOG(LogTemp, Warning, TEXT("[ModCreator] Failed to update %s with ModName/Description"), *ModInfoDst);
+                UE_LOG(LogTemp, Warning, TEXT("[ModCreator] Failed to update %s with ModName/Description/Assets"), *ModInfoDst);
             }
             else
             {
-                UE_LOG(LogTemp, Log, TEXT("[ModCreator] Updated %s (ModName=%s)"), *ModInfoDst, *ModName);
+                UE_LOG(LogTemp, Log, TEXT("[ModCreator] Updated %s (ModName=%s, Assets=Maps)"), *ModInfoDst, *ModName);
             }
         }
     }
@@ -440,7 +526,7 @@ bool SModCreatorCreatePanel::CreatePluginFromTemplate(const FString& TemplateDir
     return true;
 }
 
-bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& TemplateDir) const
+bool SModCreatorCreatePanel::ReadTemplateRequiresCopyContent(const FString& TemplateDir) const
 {
     // Look in either location
     const FString JsonPathA = TemplateDir / TEXT("modinfo.json");
@@ -453,7 +539,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
     UE_LOG(LogTemp, Log, TEXT("[ModCreator] modinfo path: %s"),
         JsonPath.IsEmpty() ? TEXT("<not found>") : *JsonPath);
 
-    bool bBuildMap = false;
+    bool bCopyContent  = false;
 
     if (!JsonPath.IsEmpty())
     {
@@ -464,15 +550,15 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
             const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
             if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
             {
-                // 1) Accept string form: "BuildRequirements": "BuildMap"
+                // 1) Accept string form: "BuildRequirements": "CopyContent"
                 {
                     FString S;
                     if (Root->TryGetStringField(TEXT("BuildRequirements"), S))
                     {
                         S.ToLowerInline();
-                        if (S == TEXT("buildmap") || S == TEXT("build map") || S == TEXT("map"))
+                        if (S == TEXT("copycontent") || S == TEXT("copy content") || S == TEXT("map"))
                         {
-                            bBuildMap = true;
+                            bCopyContent  = true;
                         }
                     }
                 }
@@ -485,7 +571,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
                         {
                             FString S = V->AsString();
                             S.ToLowerInline();
-                            if (S == TEXT("buildmap") || S == TEXT("build map") || S == TEXT("map"))
+                            if (S == TEXT("copycontent") || S == TEXT("copy content") || S == TEXT("map"))
                             {
                                 return true;
                             }
@@ -496,7 +582,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
                 auto HasBuildMapTrueInObject = [](const TSharedPtr<FJsonObject>& Obj)->bool
                     {
                         if (!Obj.IsValid()) return false;
-                        static const TCHAR* Keys[] = { TEXT("BuildMap"), TEXT("buildmap"), TEXT("Map"), TEXT("map") };
+                        static const TCHAR* Keys[] = { TEXT("CopyContent"), TEXT("copycontent"), TEXT("Map"), TEXT("map") };
                         for (auto* K : Keys)
                         {
                             bool bVal = false;
@@ -516,7 +602,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
 
                 for (const TCHAR* Field : CandidateFields)
                 {
-                    if (bBuildMap) break;
+                    if (bCopyContent ) break;
 
                     // Array form
                     const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
@@ -524,7 +610,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
                     {
                         if (HasBuildMapStringInArray(Arr))
                         {
-                            bBuildMap = true;
+                            bCopyContent  = true;
                             break;
                         }
                     }
@@ -535,7 +621,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
                     {
                         if (HasBuildMapTrueInObject(*ObjPtr))
                         {
-                            bBuildMap = true;
+                            bCopyContent  = true;
                             break;
                         }
                     }
@@ -545,7 +631,7 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
     }
 
     // Fallback heuristic: folder name contains "map" and we actually have a .umap present
-    if (!bBuildMap)
+    if (!bCopyContent )
     {
         const FString FolderName = FPaths::GetCleanFilename(TemplateDir).ToLower();
         if (FolderName.Contains(TEXT("map")))
@@ -556,14 +642,14 @@ bool SModCreatorCreatePanel::ReadTemplateRequiresBuildMap(const FString& Templat
             {
                 UE_LOG(LogTemp, Log, TEXT("[ModCreator] Heuristic: '%s' contains %d map(s). Treating as BuildMap."),
                     *FolderName, FoundMaps.Num());
-                bBuildMap = true;
+                bCopyContent  = true;
             }
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[ModCreator] BuildRequirements => BuildMap = %s"),
-        bBuildMap ? TEXT("true") : TEXT("false"));
-    return bBuildMap;
+    UE_LOG(LogTemp, Log, TEXT("[ModCreator] BuildRequirements => CopyContent = %s"),
+        bCopyContent  ? TEXT("true") : TEXT("false"));
+    return bCopyContent ;
 }
 
 bool SModCreatorCreatePanel::CopyContentTree(const FString& SrcContent, const FString& DstContent, bool bIncludeMaps) const

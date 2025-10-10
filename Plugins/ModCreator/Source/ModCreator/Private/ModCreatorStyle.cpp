@@ -11,16 +11,23 @@ void FModCreatorStyle::Initialize()
     if (StyleInstance.IsValid())
         return;
 
-    const FString ContentDir = IPluginManager::Get().FindPlugin(TEXT("ModCreator"))->GetBaseDir() / TEXT("Resources");
+    const FString ContentDir = IPluginManager::Get()
+        .FindPlugin(TEXT("ModCreator"))->GetBaseDir() / TEXT("Resources");
 
     TSharedRef<FSlateStyleSet> Style = MakeShared<FSlateStyleSet>(GetStyleSetName());
     Style->SetContentRoot(ContentDir);
 
-    // 20x20 (toolbar small) + 40x40 (menu large) – both point to your PNGs
-    Style->Set("ModCreator.Create.Small", new IMAGE_BRUSH("CreateButton", FVector2D(20.f, 20.f)));
-    Style->Set("ModCreator.Create.Large", new IMAGE_BRUSH("CreateButton", FVector2D(40.f, 40.f)));
-    Style->Set("ModCreator.Package.Small", new IMAGE_BRUSH("PackageButton", FVector2D(20.f, 20.f)));
-    Style->Set("ModCreator.Package.Large", new IMAGE_BRUSH("PackageButton", FVector2D(40.f, 40.f)));
+    // Tab/toolbar icons – use your actual filenames
+    // Create (you have CreateButton.png and CreateButton_40x.png)
+    Style->Set("ModCreator.Create.Small", new IMAGE_BRUSH(TEXT("CreateButton_40x"), FVector2D(20.f, 20.f)));
+    Style->Set("ModCreator.Create.Large", new IMAGE_BRUSH(TEXT("CreateButton_40x"), FVector2D(40.f, 40.f)));
+
+    // Package (you have PackageButton.png only – reuse and scale)
+    Style->Set("ModCreator.Package.Small", new IMAGE_BRUSH(TEXT("PackageButton"), FVector2D(20.f, 20.f)));
+    Style->Set("ModCreator.Package.Large", new IMAGE_BRUSH(TEXT("PackageButton"), FVector2D(40.f, 40.f)));
+
+    // Optional: plugin/settings icon (you have ButtonIcon_40x.png)
+    Style->Set("ModCreator.PluginIcon", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), FVector2D(40.f, 40.f)));
 
     FSlateStyleRegistry::RegisterSlateStyle(*Style);
     StyleInstance = Style;

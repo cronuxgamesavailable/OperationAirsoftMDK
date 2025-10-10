@@ -1,0 +1,43 @@
+{
+    "Version": "1.2",
+    "Data": {
+        "Source": "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\private\\pakcreatorwindow.cpp",
+        "ProvidedModule": "",
+        "PCH": "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\intermediate\\build\\win64\\x64\\modmakereditor\\development\\unrealed\\sharedpch.unrealed.project.valapi.cpp20.h.pch",
+        "Includes": [
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\intermediate\\build\\win64\\x64\\unrealeditor\\development\\modcreator\\definitions.modcreator.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\pakcreatorwindow.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\coreuobject\\public\\uobject\\noexporttypes.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\coreuobject\\public\\uobject\\propertyaccessutil.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\coreuobject\\public\\serialization\\testundeclaredscriptstructobjectreferences.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\core\\public\\math\\unitconversion.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\core\\public\\math\\unitconversion.inl",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\core\\public\\internationalization\\polyglottextdata.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\pakcreatorlog.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\desktopplatform\\public\\desktopplatformmodule.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\desktopplatform\\public\\idesktopplatform.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\editor\\unrealed\\public\\filehelpers.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\editor\\unrealed\\public\\packagetools.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\intermediate\\build\\win64\\unrealeditor\\inc\\unrealed\\uht\\packagetools.generated.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\isourcecontrolprovider.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\isourcecontrolchangelist.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\isourcecontrolchangeliststate.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\isourcecontrolstate.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\isourcecontroloperation.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\developer\\sourcecontrol\\public\\sourcecontrolresultinfo.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\intermediate\\build\\win64\\unrealeditor\\inc\\unrealed\\uht\\filehelpers.generated.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\pakcreatorstyle.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\uatprocess.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\automatedpakparams.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\pakhelperfunctions.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\interfaces\\iprojectmanager.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\moduledescriptor.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\projectdescriptor.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\custombuildsteps.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\pluginreferencedescriptor.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\localizationdescriptor.h"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}

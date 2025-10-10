@@ -2,9 +2,9 @@
   "ModName": "Base Mod",
   "Description": "An empty mod template.",
   "Thumbnail": "Thumbnail.png",
-  "MainMap": "",
   "ProjectName": "",
   "Assets": [],
   "LayoutsEnabled": false,
-  "Layouts": []
+  "Layouts": [],
+  "BuildRequirements": ""
 }

@@ -7,17 +7,18 @@
 	"Category": "Editor",
 	"CreatedBy": "Cronux Games",
 	"CreatedByURL": "",
-	"DocsURL": "",
-	"MarketplaceURL": "",
-	"SupportURL": "",
-	"EngineVersion": "5.4.0",
 	"CanContainContent": false,
-	"Installed": true,
+	"IsBetaVersion": false,
 	"Modules": [
 		{
 			"Name": "ModCreator",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		}
-	]
+	],
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"IsExperimentalVersion": false,
+	"Installed": false
 }

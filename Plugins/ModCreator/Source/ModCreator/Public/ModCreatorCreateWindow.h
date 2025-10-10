@@ -36,7 +36,7 @@ private:
 
     // filesystem helpers
     bool CreatePluginFromTemplate(const FString& TemplateDir, const FString& ModName, const FString& Author, const FString& Description);
-    bool ReadTemplateRequiresBuildMap(const FString& TemplateDir) const;
+    bool ReadTemplateRequiresCopyContent(const FString& TemplateDir) const;
     bool CopyContentTree(const FString& SrcContent, const FString& DstContent, bool bIncludeMaps) const;
     bool EnsureUPlugin(const FString& TemplateDir, const FString& DestPluginDir, const FString& ModName, const FString& Author, const FString& Description) const;
 
