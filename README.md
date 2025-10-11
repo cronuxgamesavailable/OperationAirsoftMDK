@@ -27,7 +27,7 @@ These are planned or upcoming features for the MDK:
 - 🧪 Add mod validator (e.g. check for missing assets, naming issues)
 - ☁️ Steam Workshop integration (upload mods directly)
 - 🔁 Smart dependency detection (package required assets automatically)
-- 🗺️ Layout editor: place spawn points, objectives, and flags visually
+- 🗺️ Layout editor: allow for the use of different map variations
 - 💬 Localization/translation support for mod metadata
 - 📚 Add mod documentation export option (auto-create README/template)
 
