@@ -22,7 +22,19 @@
 #include "PakHelperFunctions.h"
 #include "Interfaces/IProjectManager.h"
 #include "ProjectDescriptor.h"
-#include "DesktopPlatformModule.h"
+#include "Widgets/Layout/SWidgetSwitcher.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Input/SButton.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonWriter.h"
+#include "Serialization/JsonSerializer.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
+#include "IDesktopPlatform.h"
+#include "Editor.h"
+#include "Interfaces/IPluginManager.h"
+
 
 #define LOCTEXT_NAMESPACE "FPakCreatorWindow"
 
@@ -102,240 +114,478 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 	FText SetProjectText = LOCTEXT("SetProjectWidgetText", "Browse");
 	FText LogText = LOCTEXT("LogWidgetText", "Log goes here");
 
+	// Populate plugin list (excludes ModCreator) before building the UI
+	PopulateLayoutContentPluginList();
+
 	TSharedRef<SDockTab> PluginTab = SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
 			SNew(SOverlay)
-			+ SOverlay::Slot()
-			.Padding(15.0f)
-			.VAlign(VAlign_Fill)
-			.HAlign(HAlign_Fill)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot()
+				+ SOverlay::Slot()
+				.Padding(10.0f)
 				.VAlign(VAlign_Fill)
 				.HAlign(HAlign_Fill)
 				[
+					// === VERTICAL LAYOUT WITH TABS ===
 					SNew(SVerticalBox)
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(SelectPluginText)
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot()
-							.VAlign(VAlign_Fill)
-							.HAlign(HAlign_Fill)
-							[
-								SAssignNew(FilterInput, SEditableTextBox)
-									.HintText(HintFilterContentPluginsText)
-									.OnTextChanged(this, &FPakCreatorWindow::OnFilterTextChanged)
-									.OnVerifyTextChanged(this, &FPakCreatorWindow::OnFilterVerifyTextChanged)
-									.OnTextCommitted(this, &FPakCreatorWindow::OnFilterTextCommitted)
-							]
-					]
-					+ SVerticalBox::Slot()
-					.Padding(10.0f)
-					.VAlign(VAlign_Fill)
-					[
-						SAssignNew(PluginListWidget, SListView<TSharedPtr<FStringEntry>>)
-						.ListItemsSource(&Plugins)
-						.SelectionMode(ESelectionMode::Type::Multi)
-						.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForList)
-						.ScrollbarVisibility(EVisibility::Hidden)
-					]
-				]
-				+ SHorizontalBox::Slot()
-				.VAlign(VAlign_Fill)
-				.HAlign(HAlign_Fill)
-				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(ProjectPathText)
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot()
-						.VAlign(VAlign_Fill)
-						.HAlign(HAlign_Fill)
-						[
-							SAssignNew(ProjectFileInput, SEditableTextBox)
-							.Text(this, &FPakCreatorWindow::GetCurrentProjectFile)
-							.OnTextCommitted(this, &FPakCreatorWindow::OnProjectFileCommitted)
-							.IsReadOnly(false)
-						]
-						+ SHorizontalBox::Slot()
-						.HAlign(HAlign_Right)
-						.AutoWidth()
-						[
-							SAssignNew(ProjectBrowserButton, SButton)
-							.ButtonStyle(FCoreStyle::Get(), "NoBorder")
-							.OnClicked(this, &FPakCreatorWindow::HandleProjectBrowseButtonClicked)
-							.HAlign(HAlign_Right)
-							.VAlign(VAlign_Center)
-							.ForegroundColor(FSlateColor::UseForeground())
-							[
-								SNew(STextBlock)
-								.Text(SetProjectText)
-							]
-						]
-					]
-					/* + SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(ReleaseNameText)
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SAssignNew(ReleaseNameInput, SEditableTextBox)
-						.Text(this, &FPakCreatorWindow::GetCurrentReleaseName)
-						.OnTextCommitted(this, &FPakCreatorWindow::OnReleaseNameCommitted)
-					]*/
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(PlatformText)
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SAssignNew(PlatformComboBox, SComboBox<TSharedPtr<FString>>)
-						.OptionsSource(&PlatformsSource)
-						.InitiallySelectedItem(PlatformsSource[0])
-						.ToolTipText(PlatformToolTip)
-						.OnSelectionChanged(this, &FPakCreatorWindow::OnPlatformSelected)
-						.OnGenerateWidget(this, &FPakCreatorWindow::GenerateComboBoxWidget)
-						[
-							SAssignNew(PlatformSelectionTextBlock, STextBlock)
-							.Text(this, &FPakCreatorWindow::GetCurrentPlatform)
 
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-							.Font(FAppStyle::GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-#else
-							.Font(FEditorStyle::GetFontStyle("PropertyWindow.NormalFont"))
-#endif
-						]
-					]
-					+SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						TargetSource.Num() > 1 ? SNew(STextBlock)
-						.Text(TargetText)
-						: SNullWidget::NullWidget
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(TargetSource.Num() > 1 ? 10.0f : 0.0f)
-					.AutoHeight()
-					[
-						TargetSource.Num() > 1 ? SAssignNew(TargetComboBox, SComboBox<TSharedPtr<FString>>)
-						.OptionsSource(&TargetSource)
-						.InitiallySelectedItem(TargetSource[0])
-						.ToolTipText(TargetToolTip)
-						.OnSelectionChanged(this, &FPakCreatorWindow::OnTargetSelected)
-						.OnGenerateWidget(this, &FPakCreatorWindow::GenerateComboBoxWidget)
+						// --- TAB BUTTONS ROW (toggle-style) ---
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(0, 0, 0, 8)
 						[
-							SAssignNew(TargetSelectionTextBlock, STextBlock)
-							.Text(FText::FromString(*TargetSource[0]))
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
-							.Font(FAppStyle::GetFontStyle(TEXT("PropertyWindow.NormalFont")))
-#else
-							.Font(FEditorStyle::GetFontStyle("PropertyWindow.NormalFont"))
-#endif
+							SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.AutoWidth()
+								.Padding(0, 0, 12, 0)
+								[
+									SNew(SCheckBox)
+										.Style(&FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox"))
+										.IsChecked_Lambda([this]() { return ActiveTabIndex == 0 ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+										.OnCheckStateChanged_Lambda([this](ECheckBoxState)
+											{
+												RefreshLayoutList();
+												ActiveTabIndex = 0;
+												if (TabSwitcher.IsValid()) { TabSwitcher->SetActiveWidgetIndex(0); }
+											})
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("Main")))
+										]
+								]
+							+ SHorizontalBox::Slot()
+								.AutoWidth()
+								[
+									SNew(SCheckBox)
+										.Style(&FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox"))
+										.IsChecked_Lambda([this]() { return ActiveTabIndex == 1 ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+										.OnCheckStateChanged_Lambda([this](ECheckBoxState)
+											{
+												ActiveTabIndex = 1;
+												if (TabSwitcher.IsValid()) { TabSwitcher->SetActiveWidgetIndex(1); }
+												RefreshLayoutList();
+											})
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("Layouts")))
+										]
+								]
 						]
-						: SNullWidget::NullWidget
-					]
+
+					// --- TAB CONTENT SWITCHER ---
 					+ SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(OutputPathText)
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot()
-						.VAlign(VAlign_Fill)
+						.FillHeight(1.f)
 						.HAlign(HAlign_Fill)
 						[
-							SAssignNew(OutputInput, SEditableTextBox)
-							.Text(this, &FPakCreatorWindow::GetCurrentPath)
-							.OnTextCommitted(this, &FPakCreatorWindow::OnPathTextCommitted)
-						]
-						+ SHorizontalBox::Slot()
-						.HAlign(HAlign_Right)
-						.AutoWidth()
-						[
-							SAssignNew(BrowserButton, SButton)
-							.ButtonStyle(FCoreStyle::Get(), "NoBorder")
-							.OnClicked(this, &FPakCreatorWindow::HandleBrowseButtonClicked)
-							.HAlign(HAlign_Right)
-							.VAlign(VAlign_Center)
-							.ForegroundColor(FSlateColor::UseForeground())
-							[
-								SNew(STextBlock)
-								.Text(SetFolderText)
-							]
-						]
-					]
-					+ SVerticalBox::Slot()
-					.Padding(10.0f)
-					.AutoHeight()
-					[
-						SAssignNew(CreateButton, SButton)
-#if ENGINE_MAJOR_VERSION == 4
-						.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+							SAssignNew(TabSwitcher, SWidgetSwitcher)
+
+								// === TAB 0: MAIN (fills window) ===
+								+ SWidgetSwitcher::Slot()
+								[
+									SNew(SHorizontalBox)
+
+										// LEFT COLUMN
+										+ SHorizontalBox::Slot()
+										.FillWidth(0.5f)
+										.VAlign(VAlign_Fill)
+										.HAlign(HAlign_Fill)
+										[
+											SNew(SVerticalBox)
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock)
+														.Text(SelectPluginText)
+												]
+												+ SVerticalBox::Slot()
+												.VAlign(VAlign_Fill)
+												.HAlign(HAlign_Fill)
+												.Padding(10.0f)
+												.AutoHeight()
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.VAlign(VAlign_Fill)
+														.HAlign(HAlign_Fill)
+														[
+															SAssignNew(FilterInput, SEditableTextBox)
+																.HintText(HintFilterContentPluginsText)
+																.OnTextChanged(this, &FPakCreatorWindow::OnFilterTextChanged)
+																.OnVerifyTextChanged(this, &FPakCreatorWindow::OnFilterVerifyTextChanged)
+																.OnTextCommitted(this, &FPakCreatorWindow::OnFilterTextCommitted)
+														]
+												]
+											+ SVerticalBox::Slot()
+												.Padding(10.0f)
+												.FillHeight(1.f)
+												[
+													SAssignNew(PluginListWidget, SListView<TSharedPtr<FStringEntry>>)
+														.ListItemsSource(&Plugins)
+														.SelectionMode(ESelectionMode::Type::Multi)
+														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForList)
+														.ScrollbarVisibility(EVisibility::Hidden)
+												]
+										]
+
+									// RIGHT COLUMN
+									+ SHorizontalBox::Slot()
+										.FillWidth(0.5f)
+										.VAlign(VAlign_Fill)
+										.HAlign(HAlign_Fill)
+										[
+											SNew(SVerticalBox)
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock)
+														.Text(ProjectPathText)
+												]
+												+ SVerticalBox::Slot()
+												.VAlign(VAlign_Fill)
+												.HAlign(HAlign_Fill)
+												.Padding(10.0f)
+												.AutoHeight()
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.VAlign(VAlign_Fill)
+														.HAlign(HAlign_Fill)
+														[
+															SAssignNew(ProjectFileInput, SEditableTextBox)
+																.Text(this, &FPakCreatorWindow::GetCurrentProjectFile)
+																.OnTextCommitted(this, &FPakCreatorWindow::OnProjectFileCommitted)
+																.IsReadOnly(false)
+														]
+														+ SHorizontalBox::Slot()
+														.HAlign(HAlign_Right)
+														.AutoWidth()
+														[
+															SAssignNew(ProjectBrowserButton, SButton)
+																.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+																.OnClicked(this, &FPakCreatorWindow::HandleProjectBrowseButtonClicked)
+																.HAlign(HAlign_Right)
+																.VAlign(VAlign_Center)
+																.ForegroundColor(FSlateColor::UseForeground())
+																[
+																	SNew(STextBlock)
+																		.Text(SetProjectText)
+																]
+														]
+												]
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock)
+														.Text(PlatformText)
+												]
+												+ SVerticalBox::Slot()
+												.VAlign(VAlign_Fill)
+												.HAlign(HAlign_Fill)
+												.Padding(10.0f)
+												.AutoHeight()
+												[
+													SAssignNew(PlatformComboBox, SComboBox<TSharedPtr<FString>>)
+														.OptionsSource(&PlatformsSource)
+														.InitiallySelectedItem(PlatformsSource[0])
+														.ToolTipText(PlatformToolTip)
+														.OnSelectionChanged(this, &FPakCreatorWindow::OnPlatformSelected)
+														.OnGenerateWidget(this, &FPakCreatorWindow::GenerateComboBoxWidget)
+														[
+															SAssignNew(PlatformSelectionTextBlock, STextBlock)
+																.Text(this, &FPakCreatorWindow::GetCurrentPlatform)
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+																.Font(FAppStyle::GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+#else
+																.Font(FEditorStyle::GetFontStyle("PropertyWindow.NormalFont"))
 #endif
-						.OnClicked(this, &FPakCreatorWindow::CreateButtonPressed)
-						.HAlign(HAlign_Center)
-						.VAlign(VAlign_Center)
-						.ForegroundColor(FSlateColor::UseForeground())
-						[
-							SNew(STextBlock)
-							.Text(CreatePakText)
+														]
+												]
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													TargetSource.Num() > 1 ? SNew(STextBlock)
+														.Text(TargetText)
+														: SNullWidget::NullWidget
+												]
+												+ SVerticalBox::Slot()
+												.VAlign(VAlign_Fill)
+												.HAlign(HAlign_Fill)
+												.Padding(TargetSource.Num() > 1 ? 10.0f : 0.0f)
+												.AutoHeight()
+												[
+													TargetSource.Num() > 1 ? SAssignNew(TargetComboBox, SComboBox<TSharedPtr<FString>>)
+														.OptionsSource(&TargetSource)
+														.InitiallySelectedItem(TargetSource[0])
+														.ToolTipText(TargetToolTip)
+														.OnSelectionChanged(this, &FPakCreatorWindow::OnTargetSelected)
+														.OnGenerateWidget(this, &FPakCreatorWindow::GenerateComboBoxWidget)
+														[
+															SAssignNew(TargetSelectionTextBlock, STextBlock)
+																.Text(FText::FromString(*TargetSource[0]))
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+																.Font(FAppStyle::GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+#else
+																.Font(FEditorStyle::GetFontStyle("PropertyWindow.NormalFont"))
+#endif
+														]
+														: SNullWidget::NullWidget
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock)
+														.Text(OutputPathText)
+												]
+												+ SVerticalBox::Slot()
+												.VAlign(VAlign_Fill)
+												.HAlign(HAlign_Fill)
+												.Padding(10.0f)
+												.AutoHeight()
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.VAlign(VAlign_Fill)
+														.HAlign(HAlign_Fill)
+														[
+															SAssignNew(OutputInput, SEditableTextBox)
+																.Text(this, &FPakCreatorWindow::GetCurrentPath)
+																.OnTextCommitted(this, &FPakCreatorWindow::OnPathTextCommitted)
+														]
+														+ SHorizontalBox::Slot()
+														.HAlign(HAlign_Right)
+														.AutoWidth()
+														[
+															SAssignNew(BrowserButton, SButton)
+																.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+																.OnClicked(this, &FPakCreatorWindow::HandleBrowseButtonClicked)
+																.HAlign(HAlign_Right)
+																.VAlign(VAlign_Center)
+																.ForegroundColor(FSlateColor::UseForeground())
+																[
+																	SNew(STextBlock)
+																		.Text(SetFolderText)
+																]
+														]
+												]
+											+ SVerticalBox::Slot()
+												.Padding(10.0f)
+												.AutoHeight()
+												[
+													SAssignNew(CreateButton, SButton)
+#if ENGINE_MAJOR_VERSION == 4
+														.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+#endif
+														.OnClicked(this, &FPakCreatorWindow::CreateButtonPressed)
+														.HAlign(HAlign_Center)
+														.VAlign(VAlign_Center)
+														.ForegroundColor(FSlateColor::UseForeground())
+														[
+															SNew(STextBlock)
+																.Text(CreatePakText)
+														]
+												]
+											+ SVerticalBox::Slot()
+												.FillHeight(1.f)
+												.HAlign(HAlign_Fill)
+												[
+													SAssignNew(LogListWidget, SListView<TSharedPtr<FStringEntry>>)
+														.ListItemsSource(&LogEntries)
+														.SelectionMode(ESelectionMode::Type::None)
+														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog)
+														.ScrollbarVisibility(EVisibility::Hidden)
+												]
+										]
+								]
+
+							// === TAB 1: LAYOUTS (list + create/overwrite) ===
+							+ SWidgetSwitcher::Slot()
+								[
+									SNew(SHorizontalBox)
+
+										// LEFT: list of *.layout
+										+ SHorizontalBox::Slot()
+										.FillWidth(0.5f)
+										.VAlign(VAlign_Fill)
+										.HAlign(HAlign_Fill)
+										[
+											SNew(SVerticalBox)
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("Layouts (Project/Mods/Layouts)")))
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f, 6.0f, 10.0f, 6.0f)
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.FillWidth(1.f)
+														[
+															SAssignNew(LayoutFilterInput, SEditableTextBox)
+																.HintText(FText::FromString(TEXT("Filter layouts by name")))
+																.OnTextChanged_Lambda([this](const FText& T) { FilterLayoutList(T.ToString()); })
+														]
+														+ SHorizontalBox::Slot()
+														.AutoWidth()
+														.Padding(6.f, 0, 0, 0)
+														[
+															SNew(SButton)
+																.OnClicked(this, &FPakCreatorWindow::HandleDeselectLayoutClicked)
+																[
+																	SNew(STextBlock).Text(FText::FromString(TEXT("Deselect")))
+																]
+														]
+												]
+											+ SVerticalBox::Slot()
+												.Padding(10.0f)
+												.FillHeight(1.f)
+												[
+													SAssignNew(LayoutListWidget, SListView<TSharedPtr<FStringEntry>>)
+														.ListItemsSource(&LayoutFiles)
+														.SelectionMode(ESelectionMode::Type::Single)
+														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLayout)
+														.OnSelectionChanged(this, &FPakCreatorWindow::OnLayoutSelectionChanged)
+														.ScrollbarVisibility(EVisibility::Hidden)
+												]
+										]
+
+									// RIGHT: create/export controls
+									+ SHorizontalBox::Slot()
+										.FillWidth(0.5f)
+										.VAlign(VAlign_Fill)
+										.HAlign(HAlign_Fill)
+										[
+											SNew(SVerticalBox)
+
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("Layout Name")))
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f, 6.0f, 10.0f, 6.0f)
+												[
+													SAssignNew(LayoutNameInput, SEditableTextBox)
+														.HintText(FText::FromString(TEXT("e.g. Speedball")))
+												]
+
+												// Content Plugin for Map
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(0, 10, 0, 0)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("Content Plugin for Map")))
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f, 6.0f)
+												[
+													SAssignNew(LayoutPluginComboBox, SComboBox<TSharedPtr<FString>>)
+														.OptionsSource(&LayoutPluginSource)
+														.InitiallySelectedItem(LayoutPluginSource.Num() > 0 ? LayoutPluginSource[0] : TSharedPtr<FString>())
+														.OnSelectionChanged(this, &FPakCreatorWindow::OnLayoutPluginSelected)
+														.OnGenerateWidget(this, &FPakCreatorWindow::GenerateComboBoxWidget)
+														[
+															SAssignNew(LayoutPluginSelectionText, STextBlock)
+																.Text(this, &FPakCreatorWindow::GetCurrentLayoutPluginText)
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1
+																.Font(FAppStyle::GetFontStyle(TEXT("PropertyWindow.NormalFont")))
+#else
+																.Font(FEditorStyle::GetFontStyle("PropertyWindow.NormalFont"))
+#endif
+														]
+												]
+
+											// Map (.umap)
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(0, 10, 0, 0)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("Map (.umap)")))
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f)
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.FillWidth(1.f)
+														[
+															SAssignNew(UmapPathInput, SEditableTextBox)
+																.IsReadOnly(true)
+																.HintText(FText::FromString(TEXT("Select a .umap (metadata)")))
+														]
+														+ SHorizontalBox::Slot()
+														.AutoWidth()
+														[
+															SNew(SButton)
+																.OnClicked(this, &FPakCreatorWindow::HandleSelectUmapClicked)
+																[
+																	SNew(STextBlock).Text(FText::FromString(TEXT("Select .umap")))
+																]
+														]
+												]
+
+											// Pak (.pak) [optional]
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(0, 10, 0, 0)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("Pak (.pak) [optional]")))
+												]
+												+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f)
+												[
+													SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot()
+														.FillWidth(1.f)
+														[
+															SAssignNew(PakPathInput, SEditableTextBox)
+																.IsReadOnly(true)
+																.HintText(FText::FromString(TEXT("Select a .pak (optional)")))
+														]
+														+ SHorizontalBox::Slot()
+														.AutoWidth()
+														[
+															SNew(SButton)
+																.OnClicked(this, &FPakCreatorWindow::HandleSelectPakClicked)
+																[
+																	SNew(STextBlock).Text(FText::FromString(TEXT("Select .pak")))
+																]
+														]
+												]
+
+											// Capture material overrides toggle
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f, 6.0f)
+												[
+													SNew(SCheckBox)
+														.Style(&FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox"))
+														.IsChecked_Lambda([this]() { return bCaptureMaterialOverrides ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+														.OnCheckStateChanged_Lambda([this](ECheckBoxState S) { bCaptureMaterialOverrides = (S == ECheckBoxState::Checked); })
+														[
+															SNew(STextBlock).Text(FText::FromString(TEXT("Capture material overrides from editor")))
+														]
+												]
+
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(10.0f)
+												[
+													SNew(SButton)
+														.OnClicked(this, &FPakCreatorWindow::HandleCreateLayoutClicked)
+														.HAlign(HAlign_Center)
+														[
+															SNew(STextBlock)
+																.Text(this, &FPakCreatorWindow::GetCreateLayoutButtonText)
+														]
+												]
+										]
+								]
 						]
-					]
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Fill)
-					.HAlign(HAlign_Fill)
-					[
-						SAssignNew(LogListWidget, SListView< TSharedPtr<FStringEntry> >)
-						.ListItemsSource(&LogEntries)
-						.SelectionMode(ESelectionMode::Type::None)
-						.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog)
-						.ScrollbarVisibility(EVisibility::Hidden)
-					]
 				]
-			]
 		];
 
 	PluginTab->SetTabIcon(FPakCreatorStyle::Get().GetBrush("PakCreator.OpenPluginWindow"));
@@ -571,7 +821,7 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 	if (!IsInGameThread())
 	{
 		// Retry on the GameThread.
-		TWeakPtr<FPakCreatorWindow> WeakShared = AsShared();
+		TWeakPtr<FPakCreatorWindow> WeakShared = this->AsShared();
 		AsyncTask(ENamedThreads::GameThread, [WeakShared, ErrorCode]()
 		{
 			const TSharedPtr<FPakCreatorWindow>& PakCreatorWindow = WeakShared.Pin();
@@ -636,19 +886,6 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 		{
 			AddLogMessage(FString::Printf(TEXT("Error: Pak file not found in directory %s"), *CurrentStagingDirectory));
 		}
-	}
-
-	if (!RunBuild())
-	{
-		// If no more builds have been launched do some cleanup
-		
-		// Remove temporary staging directory
-		if (!PlatformFile.DeleteDirectoryRecursively(*GetTemporaryStagingDirectory()))
-		{
-			AddLogMessage(FString::Printf(TEXT("Warning: Failed to delete temporary build directory %s"), *GetTemporaryStagingDirectory()));
-		}
-
-		AddLogMessage(TEXT("All builds finished"));
 	}
 
 	if (!RunBuild())
@@ -909,6 +1146,486 @@ void FPakCreatorWindow::OnReleaseNameCommitted(const FText& InText, const ETextC
 
 		GConfig->Flush(false, GEditorPerProjectIni);
 	}
+}
+
+// Layout Helpers
+FString FPakCreatorWindow::GetLayoutsFolderOnDisk() const
+{
+	// <Project>/Mods/Layouts
+	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("Mods"), TEXT("Layouts")));
+}
+
+void FPakCreatorWindow::RefreshLayoutList()
+{
+	const FString Root = GetLayoutsFolderOnDisk();
+	IFileManager::Get().MakeDirectory(*Root, /*Tree=*/true);
+
+	TArray<FString> Files;
+	IFileManager::Get().FindFilesRecursive(Files, *Root, TEXT("*.layout"), /*Files=*/true, /*Directories=*/false);
+	Files.Sort();
+
+	AllLayoutFiles.Empty();
+	for (const FString& F : Files)
+	{
+		AllLayoutFiles.Add(MakeShared<FStringEntry>(F));
+	}
+	// keep filter
+	const FString CurrentFilter = LayoutFilterInput.IsValid() ? LayoutFilterInput->GetText().ToString() : TEXT("");
+	FilterLayoutList(CurrentFilter);
+
+	if (LayoutListWidget.IsValid())
+	{
+		LayoutListWidget->RequestListRefresh();
+	}
+}
+
+void FPakCreatorWindow::FilterLayoutList(const FString& InFilter)
+{
+	const FString Filter = InFilter.TrimStartAndEnd();
+	LayoutFiles.Empty();
+	if (Filter.IsEmpty())
+	{
+		LayoutFiles = AllLayoutFiles;
+	}
+	else
+	{
+		for (const auto& E : AllLayoutFiles)
+		{
+			const FString Name = FPaths::GetCleanFilename(E->PluginPath);
+			if (Name.Contains(Filter))
+			{
+				LayoutFiles.Add(E);
+			}
+		}
+	}
+	if (LayoutListWidget.IsValid())
+	{
+		LayoutListWidget->RequestListRefresh();
+	}
+}
+
+TSharedRef<ITableRow> FPakCreatorWindow::OnGenerateRowForLayout(TSharedPtr<FStringEntry> Item, const TSharedRef<STableViewBase>& OwnerTable)
+{
+	return SNew(STableRow<TSharedPtr<FStringEntry>>, OwnerTable)
+		[
+			SNew(STextBlock).Text(FText::FromString(FPaths::GetCleanFilename(Item->PluginPath)))
+		];
+}
+
+void FPakCreatorWindow::OnLayoutSelectionChanged(TSharedPtr<FStringEntry> Item, ESelectInfo::Type)
+{
+	SelectedLayoutEntry = Item;
+	SelectedLayoutPath = Item.IsValid() ? Item->PluginPath : TEXT("");
+
+	// If picked something, reflect its name in the name box
+	if (LayoutNameInput.IsValid())
+	{
+		if (Item.IsValid())
+		{
+			LayoutNameInput->SetText(FText::FromString(FPaths::GetBaseFilename(Item->PluginPath)));
+		}
+	}
+}
+
+FReply FPakCreatorWindow::HandleDeselectLayoutClicked()
+{
+	SelectedLayoutEntry.Reset();
+	SelectedLayoutPath.Reset();
+	if (LayoutListWidget.IsValid())
+	{
+		LayoutListWidget->ClearSelection();
+	}
+	return FReply::Handled();
+}
+
+FReply FPakCreatorWindow::HandleSelectPakClicked()
+{
+	IDesktopPlatform* Desktop = FDesktopPlatformModule::Get();
+	if (!Desktop) return FReply::Handled();
+
+	TArray<FString> OutFiles;
+	const bool bOk = Desktop->OpenFileDialog(
+		nullptr,
+		TEXT("Select .pak"),
+		FPaths::ProjectDir(),
+		TEXT(""),
+		TEXT("Unreal Pak (*.pak)|*.pak"),
+		EFileDialogFlags::None,
+		OutFiles
+	);
+
+	if (bOk && OutFiles.Num() > 0)
+	{
+		SelectedPakPath = FPaths::ConvertRelativePathToFull(OutFiles[0]);
+		if (PakPathInput.IsValid())
+		{
+			PakPathInput->SetText(FText::FromString(SelectedPakPath));
+		}
+	}
+	return FReply::Handled();
+}
+
+FReply FPakCreatorWindow::HandleSelectUmapClicked()
+{
+	IDesktopPlatform* Desktop = FDesktopPlatformModule::Get();
+	if (!Desktop) return FReply::Handled();
+
+	TArray<FString> OutFiles;
+	const bool bOk = Desktop->OpenFileDialog(
+		nullptr,
+		TEXT("Select .umap"),
+		FPaths::ProjectContentDir(),
+		TEXT(""),
+		TEXT("Unreal Map (*.umap)|*.umap"),
+		EFileDialogFlags::None,
+		OutFiles
+	);
+	if (bOk && OutFiles.Num() > 0)
+	{
+		SelectedUmapPath = OutFiles[0];
+		if (UmapPathInput.IsValid())
+		{
+			UmapPathInput->SetText(FText::FromString(SelectedUmapPath));
+		}
+	}
+	return FReply::Handled();
+}
+
+static void AddMaterialOverridesIfAny(TSharedPtr<FJsonObject> OutActorJson, AActor* A, bool bCapture)
+{
+	if (!bCapture || !A) return;
+
+	UStaticMeshComponent* SMC = nullptr;
+	if (AStaticMeshActor* SMA = Cast<AStaticMeshActor>(A))
+		SMC = SMA->GetStaticMeshComponent();
+	if (!SMC)
+		SMC = A->FindComponentByClass<UStaticMeshComponent>();
+	if (!SMC) return;
+
+	UStaticMesh* SM = SMC->GetStaticMesh();
+	const int32 MatCount = SM ? SM->GetStaticMaterials().Num() : SMC->GetNumMaterials();
+
+	TArray<TSharedPtr<FJsonValue>> Overrides;
+	for (int32 i = 0; i < MatCount; ++i)
+	{
+		UMaterialInterface* MI = SMC->GetMaterial(i);
+		if (!MI) continue;
+
+		const FString MatPath = MI->GetPathName();
+		FName SlotName = NAME_None;
+		if (SM && SM->GetStaticMaterials().IsValidIndex(i))
+			SlotName = SM->GetStaticMaterials()[i].MaterialSlotName;
+
+		TSharedPtr<FJsonObject> JMO = MakeShared<FJsonObject>();
+		JMO->SetNumberField(TEXT("slot_index"), i);
+		if (!SlotName.IsNone())
+			JMO->SetStringField(TEXT("slot_name"), SlotName.ToString());
+		JMO->SetStringField(TEXT("material"), MatPath);
+
+		Overrides.Add(MakeShared<FJsonValueObject>(JMO));
+	}
+
+	if (Overrides.Num() > 0)
+		OutActorJson->SetArrayField(TEXT("material_overrides"), Overrides);
+}
+
+bool FPakCreatorWindow::GatherLayoutActorsJSON(TSharedRef<FJsonObject> OutRoot)
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World) return false;
+
+	OutRoot->SetNumberField(TEXT("version"), 1);
+
+	TArray<TSharedPtr<FJsonValue>> ActorsJson;
+	static const FName LayoutTag(TEXT("LayoutItem"));
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A || !A->ActorHasTag(LayoutTag)) continue;
+
+		TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+		J->SetStringField(TEXT("id"), A->GetName());
+		J->SetStringField(TEXT("class"), A->GetClass()->GetPathName());
+
+		FString AssetPath;
+		if (AStaticMeshActor* SMA = Cast<AStaticMeshActor>(A))
+		{
+			if (UStaticMeshComponent* SMC = SMA->GetStaticMeshComponent())
+			{
+				if (UStaticMesh* SM = SMC->GetStaticMesh())
+				{
+					AssetPath = SM->GetPathName();
+				}
+			}
+		}
+		else if (UStaticMeshComponent* AnySMC = A->FindComponentByClass<UStaticMeshComponent>())
+		{
+			if (UStaticMesh* SM = AnySMC->GetStaticMesh())
+			{
+				AssetPath = SM->GetPathName();
+			}
+		}
+		if (!AssetPath.IsEmpty())
+		{
+			J->SetStringField(TEXT("asset"), AssetPath);
+		}
+
+		const FTransform T = A->GetActorTransform();
+		const FVector L = T.GetLocation();
+		const FRotator R = T.Rotator();
+		const FVector S = T.GetScale3D();
+
+		auto VecToArray = [](const FVector& V)
+			{
+				TArray<TSharedPtr<FJsonValue>> Arr;
+				Arr.Add(MakeShared<FJsonValueNumber>(V.X));
+				Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
+				Arr.Add(MakeShared<FJsonValueNumber>(V.Z));
+				return Arr;
+			};
+
+		TSharedPtr<FJsonObject> JT = MakeShared<FJsonObject>();
+		JT->SetArrayField(TEXT("location"), VecToArray(L));
+		JT->SetArrayField(TEXT("rotation"), VecToArray(FVector(R.Pitch, R.Yaw, R.Roll)));
+		JT->SetArrayField(TEXT("scale"), VecToArray(S));
+		J->SetObjectField(TEXT("transform"), JT);
+
+		TArray<TSharedPtr<FJsonValue>> TagsJson;
+		for (const FName& Tag : A->Tags)
+		{
+			TagsJson.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+		}
+		J->SetArrayField(TEXT("tags"), TagsJson);
+
+		// NEW: capture editor-assigned materials for runtime re-apply
+		AddMaterialOverridesIfAny(J, A, bCaptureMaterialOverrides);
+
+		ActorsJson.Add(MakeShared<FJsonValueObject>(J));
+	}
+
+	OutRoot->SetArrayField(TEXT("actors"), ActorsJson);
+	return true;
+}
+
+FText FPakCreatorWindow::GetCreateLayoutButtonText() const
+{
+	if (SelectedLayoutEntry.IsValid())
+	{
+		return FText::FromString(TEXT("Overwrite .layout"));
+	}
+	return FText::FromString(TEXT("Create .layout File"));
+}
+
+FReply FPakCreatorWindow::HandleCreateLayoutClicked()
+{
+	const FString DestDir = GetLayoutsFolderOnDisk();
+	IFileManager::Get().MakeDirectory(*DestDir, /*Tree=*/true);
+
+	FString Name = LayoutNameInput.IsValid() ? LayoutNameInput->GetText().ToString().TrimStartAndEnd() : TEXT("");
+
+	FString DestFile;
+	if (SelectedLayoutEntry.IsValid())
+	{
+		// Overwrite the selected file
+		DestFile = SelectedLayoutPath;
+		if (Name.IsEmpty())
+		{
+			Name = FPaths::GetBaseFilename(DestFile);
+		}
+	}
+	else
+	{
+		if (Name.IsEmpty())
+		{
+			AddLogMessage(TEXT("Layout: Name is required (or select a layout to overwrite)."));
+			return FReply::Handled();
+		}
+		DestFile = FPaths::Combine(DestDir, Name + TEXT(".layout"));
+	}
+
+	// Build JSON from current level actors with tag "LayoutItem"
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	if (!GatherLayoutActorsJSON(Root.ToSharedRef()))
+	{
+		AddLogMessage(TEXT("Layout: Failed to gather actors from current level."));
+		return FReply::Handled();
+	}
+
+	// === Build mapAssetPath + mapForLayout ===
+	// mapForLayout: from the actual selected .umap's owning project content plugin
+	// mapAssetPath: from the "Content Plugin for Map" dropdown (SelectedLayoutPluginName)
+
+	if (SelectedUmapPath.IsEmpty())
+	{
+		AddLogMessage(TEXT("Layout: Please select a .umap."));
+		return FReply::Handled();
+	}
+
+	FString AbsUmap = FPaths::ConvertRelativePathToFull(SelectedUmapPath);
+	FPaths::NormalizeFilename(AbsUmap); // forward slashes
+
+	// Only consider content plugins under <Project>/Plugins
+	const FString ProjectPluginsRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir());
+	FString ProjectPluginsRootNorm = ProjectPluginsRoot;
+	FPaths::NormalizeDirectoryName(ProjectPluginsRootNorm);
+
+	FString UmapPluginName; // e.g. "tt"
+	FString RelNoExt;       // e.g. "BaseMap" or "Maps/BaseMap"
+
+	const TArray<TSharedRef<IPlugin>>& Discovered = IPluginManager::Get().GetDiscoveredPlugins();
+	for (const TSharedRef<IPlugin>& P : Discovered)
+	{
+		if (!P->CanContainContent() || !P->IsEnabled())
+			continue;
+
+		FString BaseDir = FPaths::ConvertRelativePathToFull(P->GetBaseDir());
+		FPaths::NormalizeDirectoryName(BaseDir);
+
+		// exclude Engine/editor plugins
+		if (!BaseDir.StartsWith(ProjectPluginsRootNorm, ESearchCase::IgnoreCase))
+			continue;
+
+		const FString ContentDir = FPaths::Combine(BaseDir, TEXT("Content"));
+		FString ContentDirNorm = ContentDir;
+		FPaths::NormalizeDirectoryName(ContentDirNorm);
+
+		if (AbsUmap.StartsWith(ContentDirNorm + TEXT("/"), ESearchCase::IgnoreCase))
+		{
+			FString Rel = AbsUmap;
+			if (FPaths::MakePathRelativeTo(Rel, *ContentDirNorm))
+			{
+				Rel = FPaths::ChangeExtension(Rel, TEXT("")); // drop .umap
+				Rel.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+				static const FString Prefix = TEXT("Content/");
+				if (Rel.StartsWith(Prefix, ESearchCase::IgnoreCase))
+				{
+					Rel.RightChopInline(Prefix.Len());
+				}
+
+				UmapPluginName = P->GetName();
+				RelNoExt = Rel;
+				break;
+			}
+		}
+	}
+
+	if (UmapPluginName.IsEmpty())
+	{
+		AddLogMessage(TEXT("Layout: Selected .umap is not inside a project content plugin (<Project>/Plugins/*/Content)."));
+		return FReply::Handled();
+	}
+
+	if (SelectedLayoutPluginName.IsEmpty())
+	{
+		AddLogMessage(TEXT("Layout: Please select a Content Plugin for the map (dropdown)."));
+		return FReply::Handled();
+	}
+
+	const FString MapAssetPathRoot = FString::Printf(TEXT("/%s/Content/"), *SelectedLayoutPluginName);
+	const FString MapForLayout = FString::Printf(TEXT("/%s/Content/%s"), *UmapPluginName, *RelNoExt);
+
+	// Update JSON
+	Root->SetStringField(TEXT("displayName"), Name);
+	Root->SetStringField(TEXT("mapAssetPath"), MapAssetPathRoot);
+	Root->SetStringField(TEXT("mapForLayout"), MapForLayout);
+
+	// --- OPTIONAL (materials runtime support): record pak + derived mount point ---
+	// This enables the runtime to mount the pak before resolving the materials captured
+	// per-actor by GatherLayoutActorsJSON (material_overrides).
+	if (!SelectedPakPath.IsEmpty())
+	{
+		Root->SetStringField(TEXT("pak"), SelectedPakPath);
+
+		const FString PakBase = FPaths::GetBaseFilename(SelectedPakPath);
+		const FString MountPath = FString::Printf(TEXT("/Mods/%s"), *PakBase); // no trailing slash in JSON
+		Root->SetStringField(TEXT("mount"), MountPath);
+	}
+
+	FString OutText;
+	auto Writer = TJsonWriterFactory<>::Create(&OutText);
+	FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+
+	if (FFileHelper::SaveStringToFile(OutText, *DestFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		AddLogMessage(FString::Printf(TEXT("Layout saved: %s"), *DestFile));
+		RefreshLayoutList();
+
+		// Reselect the file we just wrote
+		for (const auto& E : LayoutFiles)
+		{
+			if (FPaths::IsSamePath(E->PluginPath, DestFile))
+			{
+				SelectedLayoutEntry = E;
+				SelectedLayoutPath = DestFile;
+				if (LayoutListWidget.IsValid())
+				{
+					LayoutListWidget->SetSelection(E);
+				}
+				break;
+			}
+		}
+	}
+	else
+	{
+		AddLogMessage(TEXT("Layout: failed to write file."));
+	}
+
+	return FReply::Handled();
+}
+
+void FPakCreatorWindow::PopulateLayoutContentPluginList()
+{
+	LayoutPluginSource.Empty();
+	SelectedLayoutPluginName.Empty();
+
+	const FString ProjectPluginsRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir());
+	FString ProjectPluginsRootNorm = ProjectPluginsRoot; FPaths::NormalizeDirectoryName(ProjectPluginsRootNorm);
+
+	const TArray<TSharedRef<IPlugin>>& Discovered = IPluginManager::Get().GetDiscoveredPlugins();
+
+	for (const TSharedRef<IPlugin>& P : Discovered)
+	{
+		// Only content plugins that live under <Project>/Plugins (exclude Engine/editor plugins)
+		if (!P->CanContainContent() || !P->IsEnabled())
+			continue;
+
+		FString BaseDir = FPaths::ConvertRelativePathToFull(P->GetBaseDir());
+		FPaths::NormalizeDirectoryName(BaseDir);
+
+		// Must be inside the project's Plugins directory
+		if (!BaseDir.StartsWith(ProjectPluginsRootNorm, ESearchCase::IgnoreCase))
+			continue;
+
+		// Explicitly exclude this tool plugin if you want
+		if (P->GetName().Equals(TEXT("ModCreator"), ESearchCase::IgnoreCase))
+			continue;
+
+		LayoutPluginSource.Add(MakeShared<FString>(P->GetName()));
+	}
+
+	if (LayoutPluginSource.Num() > 0)
+	{
+		SelectedLayoutPluginName = *LayoutPluginSource[0];
+	}
+}
+
+void FPakCreatorWindow::OnLayoutPluginSelected(TSharedPtr<FString> SelectedItem, ESelectInfo::Type)
+{
+	if (SelectedItem.IsValid())
+	{
+		SelectedLayoutPluginName = *SelectedItem;
+		if (LayoutPluginSelectionText.IsValid())
+		{
+			LayoutPluginSelectionText->SetText(FText::FromString(SelectedLayoutPluginName));
+		}
+	}
+}
+
+FText FPakCreatorWindow::GetCurrentLayoutPluginText() const
+{
+	return FText::FromString(SelectedLayoutPluginName.IsEmpty() ? TEXT("(select content plugin)") : SelectedLayoutPluginName);
 }
 
 #undef LOCTEXT_NAMESPACE
