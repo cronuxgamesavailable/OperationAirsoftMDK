@@ -37,11 +37,11 @@ These are planned or upcoming features for the MDK:
 
 Follow these simple steps to set up the MDK in your Unreal Engine project:
 
-1. Create a new project and name it **ModMaker** (VERY Important)
+1. **Create a new Project** - Name it **ModMaker** (VERY Important)
 2. **Find your Project Root** – This is the folder containing your `.uproject` file.  
 3. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
 4. **Restart Unreal Engine** – The plugin will now appear in the Editor under the Mod Tools section.
-5. Open the project settings and disable `Share Material Shader Code` and thats it!
+5. **Open the Project Settings** - Disable `Share Material Shader Code` and thats it!
 
 ---
 
