@@ -57,6 +57,9 @@ private:
 	TArray<TSharedPtr<FStringEntry>> Plugins;
 	TArray<TSharedPtr<FStringEntry>> AllPlugins;
 
+	// Layout logs
+	TSharedPtr<SListView<TSharedPtr<FStringEntry>>> LayoutLogListWidget;
+
 	// Right side controls
 	TSharedPtr<SEditableTextBox> ProjectFileInput;
 	TSharedPtr<SEditableTextBox> OutputInput;
@@ -159,7 +162,6 @@ private:
 	// --- Pak selection & options ---
 	TSharedPtr<SEditableTextBox> PakPathInput;
 	FString SelectedPakPath;                 // absolute path to the .pak (optional)
-	bool bCaptureMaterialOverrides = true;   // UI toggle
 
 	/** Layouts tab helpers */
 	void     RefreshLayoutList();

@@ -149,7 +149,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												if (TabSwitcher.IsValid()) { TabSwitcher->SetActiveWidgetIndex(0); }
 											})
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("Main")))
+											SNew(STextBlock).Text(FText::FromString(TEXT("Package Mod")))
 										]
 								]
 							+ SHorizontalBox::Slot()
@@ -474,7 +474,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												.AutoHeight()
 												.Padding(0, 10, 0, 0)
 												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("Content Plugin for Map")))
+													SNew(STextBlock).Text(FText::FromString(TEXT("Plugin with Map Assets")))
 												]
 												+ SVerticalBox::Slot()
 												.AutoHeight()
@@ -501,7 +501,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												.AutoHeight()
 												.Padding(0, 10, 0, 0)
 												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("Map (.umap)")))
+													SNew(STextBlock).Text(FText::FromString(TEXT("Map for the Layout")))
 												]
 												+ SVerticalBox::Slot()
 												.AutoHeight()
@@ -513,7 +513,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 														[
 															SAssignNew(UmapPathInput, SEditableTextBox)
 																.IsReadOnly(true)
-																.HintText(FText::FromString(TEXT("Select a .umap (metadata)")))
+																.HintText(FText::FromString(TEXT("Select a .umap")))
 														]
 														+ SHorizontalBox::Slot()
 														.AutoWidth()
@@ -525,51 +525,6 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																]
 														]
 												]
-
-											// Pak (.pak) [optional]
-											+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(0, 10, 0, 0)
-												[
-													SNew(STextBlock).Text(FText::FromString(TEXT("Pak (.pak) [optional]")))
-												]
-												+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(10.0f)
-												[
-													SNew(SHorizontalBox)
-														+ SHorizontalBox::Slot()
-														.FillWidth(1.f)
-														[
-															SAssignNew(PakPathInput, SEditableTextBox)
-																.IsReadOnly(true)
-																.HintText(FText::FromString(TEXT("Select a .pak (optional)")))
-														]
-														+ SHorizontalBox::Slot()
-														.AutoWidth()
-														[
-															SNew(SButton)
-																.OnClicked(this, &FPakCreatorWindow::HandleSelectPakClicked)
-																[
-																	SNew(STextBlock).Text(FText::FromString(TEXT("Select .pak")))
-																]
-														]
-												]
-
-											// Capture material overrides toggle
-											+ SVerticalBox::Slot()
-												.AutoHeight()
-												.Padding(10.0f, 6.0f)
-												[
-													SNew(SCheckBox)
-														.Style(&FAppStyle::Get().GetWidgetStyle<FCheckBoxStyle>("ToggleButtonCheckbox"))
-														.IsChecked_Lambda([this]() { return bCaptureMaterialOverrides ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-														.OnCheckStateChanged_Lambda([this](ECheckBoxState S) { bCaptureMaterialOverrides = (S == ECheckBoxState::Checked); })
-														[
-															SNew(STextBlock).Text(FText::FromString(TEXT("Capture material overrides from editor")))
-														]
-												]
-
 											+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f)
@@ -582,6 +537,18 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.Text(this, &FPakCreatorWindow::GetCreateLayoutButtonText)
 														]
 												]
+
+											// --- Layout Log (same spot as Package Mod) --- // NEW
+											+ SVerticalBox::Slot() // NEW
+												.FillHeight(1.f)    // NEW
+												.HAlign(HAlign_Fill)// NEW
+												[                   // NEW
+													SAssignNew(LayoutLogListWidget, SListView<TSharedPtr<FStringEntry>>) // NEW
+														.ListItemsSource(&LogEntries)    // NEW
+														.SelectionMode(ESelectionMode::Type::None) // NEW
+														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog) // NEW
+														.ScrollbarVisibility(EVisibility::Hidden) // NEW
+												]                   // NEW
 										]
 								]
 						]
@@ -936,6 +903,18 @@ void FPakCreatorWindow::AddLogMessage(const FString& Message)
 
 	TSharedPtr<FStringEntry> Entry = MakeShareable(new FStringEntry(Message));
 	LogEntries.Add(Entry);
+
+	// Instant UI refresh on both tabs (even if one is hidden in the switcher)
+	if (LogListWidget.IsValid())
+	{
+		LogListWidget->RequestListRefresh();
+		LogListWidget->RequestScrollIntoView(Entry);
+	}
+	if (LayoutLogListWidget.IsValid()) // NEW
+	{
+		LayoutLogListWidget->RequestListRefresh();
+		LayoutLogListWidget->RequestScrollIntoView(Entry);
+	}
 }
 
 EActiveTimerReturnType FPakCreatorWindow::RefreshLog(double InCurrentTime, float InDeltaTime)
@@ -943,6 +922,22 @@ EActiveTimerReturnType FPakCreatorWindow::RefreshLog(double InCurrentTime, float
 	if (LogListWidget.IsValid())
 	{
 		LogListWidget->RequestListRefresh();
+
+		// Optional auto-scroll
+		if (LogEntries.Num() > 0)
+		{
+			LogListWidget->RequestScrollIntoView(LogEntries.Last());
+		}
+	}
+	if (LayoutLogListWidget.IsValid()) // NEW
+	{
+		LayoutLogListWidget->RequestListRefresh();
+
+		// Optional auto-scroll
+		if (LogEntries.Num() > 0)
+		{
+			LayoutLogListWidget->RequestScrollIntoView(LogEntries.Last());
+		}
 	}
 
 	return EActiveTimerReturnType::Continue;
@@ -1399,7 +1394,7 @@ bool FPakCreatorWindow::GatherLayoutActorsJSON(TSharedRef<FJsonObject> OutRoot)
 		J->SetArrayField(TEXT("tags"), TagsJson);
 
 		// NEW: capture editor-assigned materials for runtime re-apply
-		AddMaterialOverridesIfAny(J, A, bCaptureMaterialOverrides);
+		AddMaterialOverridesIfAny(J, A, true);
 
 		ActorsJson.Add(MakeShared<FJsonValueObject>(J));
 	}
@@ -1419,10 +1414,18 @@ FText FPakCreatorWindow::GetCreateLayoutButtonText() const
 
 FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 {
+	// Clear logs like the pak flow
+	LogEntries.Reset();
+	if (LogListWidget.IsValid())          LogListWidget->RequestListRefresh();
+	if (LayoutLogListWidget.IsValid())    LayoutLogListWidget->RequestListRefresh();
+
 	const FString DestDir = GetLayoutsFolderOnDisk();
 	IFileManager::Get().MakeDirectory(*DestDir, /*Tree=*/true);
+	AddLogMessage(TEXT("Layout: Starting export…"));
+	AddLogMessage(FString::Printf(TEXT("Layout: Output folder = %s"), *DestDir));
 
 	FString Name = LayoutNameInput.IsValid() ? LayoutNameInput->GetText().ToString().TrimStartAndEnd() : TEXT("");
+	AddLogMessage(FString::Printf(TEXT("Layout: Input name = \"%s\""), *Name));
 
 	FString DestFile;
 	if (SelectedLayoutEntry.IsValid())
@@ -1432,7 +1435,9 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 		if (Name.IsEmpty())
 		{
 			Name = FPaths::GetBaseFilename(DestFile);
+			AddLogMessage(FString::Printf(TEXT("Layout: No name typed; using selected file base name = \"%s\""), *Name));
 		}
+		AddLogMessage(FString::Printf(TEXT("Layout: Overwriting existing file = %s"), *DestFile));
 	}
 	else
 	{
@@ -1442,37 +1447,40 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 			return FReply::Handled();
 		}
 		DestFile = FPaths::Combine(DestDir, Name + TEXT(".layout"));
+		AddLogMessage(FString::Printf(TEXT("Layout: Target file = %s"), *DestFile));
 	}
 
 	// Build JSON from current level actors with tag "LayoutItem"
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	AddLogMessage(TEXT("Layout: Gathering actors (tag: LayoutItem)…"));
 	if (!GatherLayoutActorsJSON(Root.ToSharedRef()))
 	{
 		AddLogMessage(TEXT("Layout: Failed to gather actors from current level."));
 		return FReply::Handled();
 	}
+	{
+		const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
+		const int32 ActorCount = (Root->TryGetArrayField(TEXT("actors"), ActorsArr) && ActorsArr) ? ActorsArr->Num() : 0;
+		AddLogMessage(FString::Printf(TEXT("Layout: Collected %d actor(s)."), ActorCount));
+	}
 
 	// === Build mapAssetPath + mapForLayout ===
-	// mapForLayout: from the actual selected .umap's owning project content plugin
-	// mapAssetPath: from the "Content Plugin for Map" dropdown (SelectedLayoutPluginName)
-
 	if (SelectedUmapPath.IsEmpty())
 	{
 		AddLogMessage(TEXT("Layout: Please select a .umap."));
 		return FReply::Handled();
 	}
+	AddLogMessage(FString::Printf(TEXT("Layout: Selected .umap = %s"), *SelectedUmapPath));
 
 	FString AbsUmap = FPaths::ConvertRelativePathToFull(SelectedUmapPath);
 	FPaths::NormalizeFilename(AbsUmap); // forward slashes
 
-	// Only consider content plugins under <Project>/Plugins
 	const FString ProjectPluginsRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir());
 	FString ProjectPluginsRootNorm = ProjectPluginsRoot;
 	FPaths::NormalizeDirectoryName(ProjectPluginsRootNorm);
 
 	FString UmapPluginName; // e.g. "tt"
-	FString RelNoExt;       // e.g. "BaseMap" or "Maps/BaseMap"
-
+	FString RelNoExt;       // e.g. "Maps/BaseMap"
 	const TArray<TSharedRef<IPlugin>>& Discovered = IPluginManager::Get().GetDiscoveredPlugins();
 	for (const TSharedRef<IPlugin>& P : Discovered)
 	{
@@ -1516,31 +1524,34 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 		AddLogMessage(TEXT("Layout: Selected .umap is not inside a project content plugin (<Project>/Plugins/*/Content)."));
 		return FReply::Handled();
 	}
+	AddLogMessage(FString::Printf(TEXT("Layout: .umap plugin = %s, Relative = %s"), *UmapPluginName, *RelNoExt));
 
 	if (SelectedLayoutPluginName.IsEmpty())
 	{
 		AddLogMessage(TEXT("Layout: Please select a Content Plugin for the map (dropdown)."));
 		return FReply::Handled();
 	}
+	AddLogMessage(FString::Printf(TEXT("Layout: Content Plugin for map = %s"), *SelectedLayoutPluginName));
 
 	const FString MapAssetPathRoot = FString::Printf(TEXT("/%s/Content/"), *SelectedLayoutPluginName);
 	const FString MapForLayout = FString::Printf(TEXT("/%s/Content/%s"), *UmapPluginName, *RelNoExt);
+	AddLogMessage(FString::Printf(TEXT("Layout: mapAssetPath = %s"), *MapAssetPathRoot));
+	AddLogMessage(FString::Printf(TEXT("Layout: mapForLayout = %s"), *MapForLayout));
 
 	// Update JSON
 	Root->SetStringField(TEXT("displayName"), Name);
 	Root->SetStringField(TEXT("mapAssetPath"), MapAssetPathRoot);
 	Root->SetStringField(TEXT("mapForLayout"), MapForLayout);
 
-	// --- OPTIONAL (materials runtime support): record pak + derived mount point ---
-	// This enables the runtime to mount the pak before resolving the materials captured
-	// per-actor by GatherLayoutActorsJSON (material_overrides).
+	// Optional pak/mount
 	if (!SelectedPakPath.IsEmpty())
 	{
 		Root->SetStringField(TEXT("pak"), SelectedPakPath);
-
 		const FString PakBase = FPaths::GetBaseFilename(SelectedPakPath);
-		const FString MountPath = FString::Printf(TEXT("/Mods/%s"), *PakBase); // no trailing slash in JSON
+		const FString MountPath = FString::Printf(TEXT("/Mods/%s"), *PakBase);
 		Root->SetStringField(TEXT("mount"), MountPath);
+		AddLogMessage(FString::Printf(TEXT("Layout: pak = %s"), *SelectedPakPath));
+		AddLogMessage(FString::Printf(TEXT("Layout: mount = %s"), *MountPath));
 	}
 
 	FString OutText;
@@ -1549,7 +1560,10 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 
 	if (FFileHelper::SaveStringToFile(OutText, *DestFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		AddLogMessage(FString::Printf(TEXT("Layout saved: %s"), *DestFile));
+		const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
+		const int32 ActorCount = (Root->TryGetArrayField(TEXT("actors"), ActorsArr) && ActorsArr) ? ActorsArr->Num() : 0;
+
+		AddLogMessage(FString::Printf(TEXT("Layout saved: %s (%d actors)"), *DestFile, ActorCount));
 		RefreshLayoutList();
 
 		// Reselect the file we just wrote
@@ -1563,9 +1577,14 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 				{
 					LayoutListWidget->SetSelection(E);
 				}
+				AddLogMessage(FString::Printf(TEXT("Layout: Reselected %s"), *DestFile));
 				break;
 			}
 		}
+
+		// FINAL line (matches your requested wording)
+		AddLogMessage(FString::Printf(TEXT("Layout Finished!"),
+			*FPaths::GetCleanFilename(DestFile)));
 	}
 	else
 	{
