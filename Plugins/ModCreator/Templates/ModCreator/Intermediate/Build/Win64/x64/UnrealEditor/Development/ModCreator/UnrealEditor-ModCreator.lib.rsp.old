@@ -1,0 +1,22 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UnrealEditor-ModCreator.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Intermediate\Build\Win64\x64\UnrealEditor\Development\UnrealEd\SharedPCH.UnrealEd.Project.ValApi.Cpp20.h.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\AutomatedPakParams.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\ModCreator.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\ModCreatorCommands.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\ModCreatorCreateWindow.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\ModCreatorStyle.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\PakCreatorCommands.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\PakCreatorLog.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\PakCreatorStyle.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\PakCreatorWindow.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\PakHelperFunctions.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\UATProcess.cpp.obj"
+"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\Default.rc2.res"
+/OUT:"C:\Users\Ryan\Documents\Unreal Projects\ModMaker\Plugins\ModCreator\Intermediate\Build\Win64\x64\UnrealEditor\Development\ModCreator\UnrealEditor-ModCreator.lib"

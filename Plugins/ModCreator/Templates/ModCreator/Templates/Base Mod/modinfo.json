@@ -1,0 +1,10 @@
+{
+  "ModName": "Base Mod",
+  "Description": "An empty mod template.",
+  "Thumbnail": "Thumbnail.png",
+  "ProjectName": "",
+  "Assets": [],
+  "LayoutsEnabled": false,
+  "Layouts": [],
+  "BuildRequirements": ""
+}

@@ -1,0 +1,10 @@
+{
+  "ModName": "Base Map",
+  "Description": "A base map template.",
+  "Thumbnail": "Thumbnail.png",
+  "ProjectName": "",
+  "Assets": [],
+  "LayoutsEnabled": true,
+  "Layouts": [],
+  "BuildRequirements": "CopyContent"
+}

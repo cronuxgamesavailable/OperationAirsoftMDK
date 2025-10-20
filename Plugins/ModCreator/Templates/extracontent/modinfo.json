@@ -1,0 +1,10 @@
+{
+	"ModName": "Extra Content",
+	"Description": "Everything you will need to get the mods working in game! (Combine with your mod)",
+	"Thumbnail": "Thumbnail.png",
+	"ProjectName": "ModMaker",
+	"Assets": [],
+	"LayoutsEnabled": false,
+	"Layouts": [],
+	"BuildRequirements": ""
+}

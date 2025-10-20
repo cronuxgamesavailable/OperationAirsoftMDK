@@ -1,0 +1,10 @@
+{
+  "ModName": "Base Layout",
+  "Description": "A base layout template.",
+  "Thumbnail": "Thumbnail.png",
+  "ProjectName": "",
+  "Assets": [],
+  "LayoutsEnabled": true,
+  "Layouts": [],
+  "BuildRequirements": "CopyContent"
+}

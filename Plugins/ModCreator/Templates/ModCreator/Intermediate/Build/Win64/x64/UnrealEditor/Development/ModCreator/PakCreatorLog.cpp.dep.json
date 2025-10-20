@@ -1,0 +1,14 @@
+{
+    "Version": "1.2",
+    "Data": {
+        "Source": "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\private\\pakcreatorlog.cpp",
+        "ProvidedModule": "",
+        "PCH": "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\intermediate\\build\\win64\\x64\\modmakereditor\\development\\unrealed\\sharedpch.unrealed.project.valapi.cpp20.h.pch",
+        "Includes": [
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\intermediate\\build\\win64\\x64\\unrealeditor\\development\\modcreator\\definitions.modcreator.h",
+            "c:\\users\\ryan\\documents\\unreal projects\\modmaker\\plugins\\modcreator\\source\\modcreator\\public\\pakcreatorlog.h"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}
