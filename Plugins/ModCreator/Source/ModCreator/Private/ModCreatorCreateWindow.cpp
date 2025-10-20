@@ -311,12 +311,19 @@ void SModCreatorCreatePanel::ScanTemplates()
             const FString FolderPath(Path);
             const FString Name = FPaths::GetCleanFilename(FolderPath);
 
-            // Special case: do NOT show a tile for "extracontent"
-            if (Name.Equals(TEXT("extracontent"), ESearchCase::IgnoreCase))
+            // Special cases: do NOT show a tile for "extracontent" or "ModCreator"
+            if (Name.Equals(TEXT("extracontent"), ESearchCase::IgnoreCase) ||
+                Name.Equals(TEXT("ModCreator"), ESearchCase::IgnoreCase))
             {
-                bHasExtraContent = true;
-                ExtraContentDir = FolderPath;
-                GatherExtraUassets(ExtraContentDir, ExtraAssetRelPaths);
+                // Handle extracontent separately (used for dropdown)
+                if (Name.Equals(TEXT("extracontent"), ESearchCase::IgnoreCase))
+                {
+                    bHasExtraContent = true;
+                    ExtraContentDir = FolderPath;
+                    GatherExtraUassets(ExtraContentDir, ExtraAssetRelPaths);
+                }
+
+                // Skip adding this folder as a visible template
                 return true;
             }
 
