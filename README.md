@@ -1,6 +1,6 @@
 # Operation Airsoft MDK (Mod Development Kit) 🎯
 
-Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.0 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
+Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.1 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
 
 > ⚠️ **Note:** This repository contains *only the plugin*.  
 > You can integrate it into your own Unreal Engine 5.4 project to enable mod packaging features.  
@@ -40,8 +40,9 @@ Follow these simple steps to set up the MDK in your Unreal Engine project:
 1. **Create a new Project** - Name it **ModMaker** (VERY Important)
 2. **Find your Project Root** – This is the folder containing your `.uproject` file.  
 3. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
-4. **Restart Unreal Engine** – The plugin will now appear in the Editor under the Mod Tools section.
-5. **Open the Project Settings** - Disable `Share Material Shader Code` and thats it!
+4. **Copy the Extra Content Plugin** - Place **extracontent** folder into: ProjectRoot/Plugins/
+5. **Restart Unreal Engine** – The plugin will now appear in the Editor under the Mod Tools section.
+6. **Open the Project Settings** - Disable `Share Material Shader Code` and thats it!
 
 ---
 
