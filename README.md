@@ -23,7 +23,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.2 –
 
 These are planned or upcoming features for the MDK:
 
-- ⚙️ Support for Multiple Mod Types – Add Gun Parts as a template.
+- ⚙️ Support for Multiple Mod Types – Add Gun Parts and Clothes as a template.
 - 🧪 Add mod validator (e.g. check for missing assets, naming issues)
 - ☁️ Steam Workshop integration (upload mods directly)
 - 🔁 Smart dependency detection (package required assets automatically)
