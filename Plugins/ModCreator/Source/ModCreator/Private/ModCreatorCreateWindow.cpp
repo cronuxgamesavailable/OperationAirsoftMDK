@@ -22,6 +22,9 @@
 #include "HAL/PlatformFileManager.h"
 #include "ModCreatorStyle.h"
 #include "Widgets/Layout/SExpandableArea.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Modules/ModuleManager.h"
 
 const FName FModCreatorCreateWindow::TabName(TEXT("ModCreator_CreateTab"));
 
@@ -100,60 +103,111 @@ namespace
         return bOk;
     }
 
-    // --- NEW: scan for .umap files inside this plugin's Content and write them into Root["Assets"].
+    // Reuse the same helper name/signature, but now it gathers Maps + Blueprints + Models + Materials.
     static void PopulateAssetsWithMaps(TSharedPtr<FJsonObject>& Root, const FString& PluginDir, const FString& ModName)
     {
-        const FString ContentDir = PluginDir / TEXT("Content");
-        if (!FPaths::DirectoryExists(ContentDir))
-        {
-            // nothing to do
-            return;
-        }
-
-        // Gather all .umap files
-        TArray<FString> MapFiles;
-        IFileManager::Get().FindFilesRecursive(MapFiles, *ContentDir, TEXT("*.umap"), /*Files*/true, /*Directories*/false);
-
-        // Build (or replace) the Assets array
+        // We'll prefer the Asset Registry (fast & reliable). Fallback to the old file-scan for maps if needed.
         TArray<TSharedPtr<FJsonValue>> AssetsArray;
 
-        for (const FString& AbsPath : MapFiles)
+        auto Push = [&AssetsArray](const FString& Type, const FString& Name)
+            {
+                TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+                Obj->SetStringField(TEXT("Type"), Type);
+                Obj->SetStringField(TEXT("Name"), Name);
+                AssetsArray.Add(MakeShared<FJsonValueObject>(Obj));
+            };
+
+        bool bUsedAssetRegistry = false;
+
+        // --- Asset Registry path (recommended) ---
+        // Content-only plugins mount at "/<ModName>"
+        const FName PackageRoot(*FString::Printf(TEXT("/%s"), *ModName));
+
+        if (FModuleManager::Get().IsModuleLoaded("AssetRegistry") || FModuleManager::Get().LoadModule("AssetRegistry") != nullptr)
         {
-            // Build plugin-relative path under Content/
-            FString Rel = AbsPath;
-            FPaths::NormalizeFilename(Rel);
+            FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+            IAssetRegistry& AR = ARM.Get();
 
-            FString ContentNorm = ContentDir;
-            FPaths::NormalizeDirectoryName(ContentNorm);
-            if (Rel.StartsWith(ContentNorm + TEXT("/")))
+            FARFilter Filter;
+            Filter.PackagePaths.Add(PackageRoot);
+            Filter.bRecursivePaths = true;
+            Filter.bIncludeOnlyOnDiskAssets = true;
+
+            TArray<FAssetData> Assets;
+            AR.GetAssets(Filter, Assets);
+
+            for (const FAssetData& AD : Assets)
             {
-                Rel = Rel.Mid(ContentNorm.Len() + 1); // e.g. "Maps/Arena01.umap"
+#if ENGINE_MAJOR_VERSION >= 5
+                const FString ClassName = AD.AssetClassPath.GetAssetName().ToString();
+#else
+                const FString ClassName = AD.AssetClass.ToString();
+#endif
+                const FString AssetName = AD.AssetName.ToString();
+
+                // Maps are UWorld assets
+                if (ClassName == TEXT("World"))
+                {
+                    Push(TEXT("Map"), AssetName);
+                    continue;
+                }
+
+                // Blueprints (primary BP asset)
+                if (ClassName == TEXT("Blueprint"))
+                {
+                    Push(TEXT("Blueprint"), AssetName);
+                    continue;
+                }
+
+                // Models
+                if (ClassName == TEXT("StaticMesh") || ClassName == TEXT("SkeletalMesh"))
+                {
+                    Push(TEXT("Model"), AssetName);
+                    continue;
+                }
+
+                // Materials (base + instances)
+                if (ClassName == TEXT("Material") ||
+                    ClassName == TEXT("MaterialInstance") ||
+                    ClassName == TEXT("MaterialInstanceConstant"))     // UE4 compat
+                {
+                    Push(TEXT("Material"), AssetName);
+                    continue;
+                }
+
+                // (Optional: add Texture2D, NiagaraSystem, SoundWave, etc.)
             }
 
-            const FString AssetName = FPaths::GetBaseFilename(Rel);               // "Arena01"
-            const FString RelNoExt = FPaths::GetBaseFilename(Rel, false);        // also "Arena01"
-            const FString RelDir = FPaths::GetPath(Rel);                       // "Maps"
-
-            // For content-only plugins, the mount point is "/<PluginName>/..."
-            // We’ll use the ModName as the mount root (matches Content-only plugin mount).
-            FString MountPath = FString::Printf(TEXT("/%s/"), *ModName);
-            if (!RelDir.IsEmpty())
-            {
-                MountPath += RelDir + TEXT("/");
-            }
-
-            // Simplified: store only map names (no path)
-            const FString AssetRef = MountPath + AssetName + TEXT(".") + AssetName;
-
-            // {"Type":"Map","Name":"Arena01"}
-            TSharedPtr<FJsonObject> MapObj = MakeShared<FJsonObject>();
-            MapObj->SetStringField(TEXT("Type"), TEXT("Map"));
-            MapObj->SetStringField(TEXT("Name"), AssetName);
-
-            AssetsArray.Add(MakeShared<FJsonValueObject>(MapObj));
+            bUsedAssetRegistry = true;
         }
 
-        // Write back to Root
+        // --- Fallback: if AssetRegistry wasn't available (unlikely), keep your old map scan so at least Maps appear ---
+        if (!bUsedAssetRegistry)
+        {
+            const FString ContentDir = PluginDir / TEXT("Content");
+            if (FPaths::DirectoryExists(ContentDir))
+            {
+                TArray<FString> MapFiles;
+                IFileManager::Get().FindFilesRecursive(MapFiles, *ContentDir, TEXT("*.umap"), /*Files*/true, /*Dirs*/false);
+
+                for (const FString& AbsPath : MapFiles)
+                {
+                    FString Rel = AbsPath;
+                    FPaths::NormalizeFilename(Rel);
+
+                    FString ContentNorm = ContentDir;
+                    FPaths::NormalizeDirectoryName(ContentNorm);
+                    if (Rel.StartsWith(ContentNorm + TEXT("/")))
+                    {
+                        Rel = Rel.Mid(ContentNorm.Len() + 1); // e.g. "Maps/Arena01.umap"
+                    }
+
+                    const FString AssetName = FPaths::GetBaseFilename(Rel);
+                    Push(TEXT("Map"), AssetName);
+                }
+            }
+        }
+
         Root->SetArrayField(TEXT("Assets"), AssetsArray);
     }
 

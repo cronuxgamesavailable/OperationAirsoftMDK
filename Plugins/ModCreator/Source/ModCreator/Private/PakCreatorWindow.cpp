@@ -34,9 +34,162 @@
 #include "IDesktopPlatform.h"
 #include "Editor.h"
 #include "Interfaces/IPluginManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
+#include "Engine/Texture2D.h"
+#include "Engine/World.h"
 
 
 #define LOCTEXT_NAMESPACE "FPakCreatorWindow"
+
+// ===== ModInfo refresh helpers (local copy) =====
+namespace
+{
+	// Scans a content-only plugin’s assets and fills Root["Assets"] with Maps, Blueprints, Models, Materials.
+	static void PopulateAssetsWithMaps(TSharedPtr<FJsonObject>& Root, const FString& PluginDir, const FString& ModName)
+	{
+		TArray<TSharedPtr<FJsonValue>> AssetsArray;
+
+		auto Push = [&AssetsArray](const FString& Type, const FString& Name)
+			{
+				TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+				Obj->SetStringField(TEXT("Type"), Type);
+				Obj->SetStringField(TEXT("Name"), Name);
+				AssetsArray.Add(MakeShared<FJsonValueObject>(Obj));
+			};
+
+		bool bUsedAssetRegistry = false;
+
+		// Content-only plugins mount at "/<ModName>"
+		const FName PackageRoot(*FString::Printf(TEXT("/%s"), *ModName));
+
+		if (FModuleManager::Get().IsModuleLoaded("AssetRegistry") || FModuleManager::Get().LoadModule("AssetRegistry") != nullptr)
+		{
+			FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+			IAssetRegistry& AR = ARM.Get();
+
+			FARFilter Filter;
+			Filter.PackagePaths.Add(PackageRoot);
+			Filter.bRecursivePaths = true;
+			Filter.bIncludeOnlyOnDiskAssets = true;
+
+			TArray<FAssetData> Assets;
+			AR.GetAssets(Filter, Assets);
+
+			for (const FAssetData& AD : Assets)
+			{
+#if ENGINE_MAJOR_VERSION >= 5
+				const FString ClassName = AD.AssetClassPath.GetAssetName().ToString();
+#else
+				const FString ClassName = AD.AssetClass.ToString();
+#endif
+				const FString AssetName = AD.AssetName.ToString();
+
+				if (ClassName == TEXT("World"))
+				{
+					Push(TEXT("Map"), AssetName);
+					continue;
+				}
+				if (ClassName == TEXT("Blueprint"))
+				{
+					Push(TEXT("Blueprint"), AssetName);
+					continue;
+				}
+				if (ClassName == TEXT("StaticMesh") || ClassName == TEXT("SkeletalMesh"))
+				{
+					Push(TEXT("Model"), AssetName);
+					continue;
+				}
+				if (ClassName == TEXT("Material") ||
+					ClassName == TEXT("MaterialInstance") ||
+					ClassName == TEXT("MaterialInstanceConstant"))
+				{
+					Push(TEXT("Material"), AssetName);
+					continue;
+				}
+			}
+
+			bUsedAssetRegistry = true;
+		}
+
+		// Fallback: at least list maps via file scan if AR wasn’t available
+		if (!bUsedAssetRegistry)
+		{
+			const FString ContentDir = PluginDir / TEXT("Content");
+			if (FPaths::DirectoryExists(ContentDir))
+			{
+				TArray<FString> MapFiles;
+				IFileManager::Get().FindFilesRecursive(MapFiles, *ContentDir, TEXT("*.umap"), true, false);
+				for (const FString& AbsPath : MapFiles)
+				{
+					FString Rel = AbsPath; FPaths::NormalizeFilename(Rel);
+					FString ContentNorm = ContentDir; FPaths::NormalizeDirectoryName(ContentNorm);
+					if (Rel.StartsWith(ContentNorm + TEXT("/")))
+					{
+						const FString AssetName = FPaths::GetBaseFilename(Rel.Mid(ContentNorm.Len() + 1));
+						Push(TEXT("Map"), AssetName);
+					}
+				}
+			}
+		}
+
+		Root->SetArrayField(TEXT("Assets"), AssetsArray);
+	}
+
+	// Loads or creates modinfo.json, updates fields, repopulates Assets, and writes back to disk.
+	static bool UpdateModInfoJson(const FString& ModInfoPath, const FString& ModName, const FString& Description, const FString& PluginDir)
+	{
+		FString In;
+		TSharedPtr<FJsonObject> Root;
+
+		if (FPaths::FileExists(ModInfoPath) && FFileHelper::LoadFileToString(In, *ModInfoPath))
+		{
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(In);
+			if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+			{
+				Root = MakeShared<FJsonObject>();
+			}
+		}
+		else
+		{
+			Root = MakeShared<FJsonObject>();
+		}
+
+		// Basic fields
+		Root->SetStringField(TEXT("ModName"), ModName);
+		if (!Description.IsEmpty())
+		{
+			Root->SetStringField(TEXT("Description"), Description);
+		}
+
+		const FString ProjectName = FApp::GetProjectName();
+		if (!ProjectName.IsEmpty())
+		{
+			Root->SetStringField(TEXT("ProjectName"), ProjectName);
+		}
+
+		// Remove legacy fields and repopulate assets
+		Root->RemoveField(TEXT("MainMap"));
+		PopulateAssetsWithMaps(Root, PluginDir, ModName);
+
+		// Ensure optional fields exist
+		if (!Root->HasField(TEXT("LayoutsEnabled"))) Root->SetBoolField(TEXT("LayoutsEnabled"), false);
+		if (!Root->HasField(TEXT("Layouts")))        Root->SetArrayField(TEXT("Layouts"), {});
+		if (!Root->HasField(TEXT("Thumbnail")))      Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
+		if (!Root->HasField(TEXT("BuildRequirements"))) Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
+
+		FString Out;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer))
+		{
+			return false;
+		}
+		return FFileHelper::SaveStringToFile(Out, *ModInfoPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+} // namespace
+// ===== end helpers =====
 
 FPakCreatorWindow::~FPakCreatorWindow()
 {
@@ -871,28 +1024,67 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 		}
 
 		// === Copy modinfo.json into subfolder named after mod ===
-		const FString PluginFolder = FPaths::Combine(FPaths::ProjectPluginsDir(), CurrentTaskName);
-		const FString ModInfoSource = FPaths::Combine(PluginFolder, TEXT("modinfo.json"));
-
-		if (PlatformFile.FileExists(*ModInfoSource))
+		// === REPLACE YOUR EXISTING "copy modinfo.json into subfolder" BLOCK WITH THIS ===
 		{
-			const FString SubFolderPath = FPaths::Combine(OutputPath, CurrentTaskName);
-			PlatformFile.CreateDirectoryTree(*SubFolderPath);
+			const FString PluginFolder = FPaths::Combine(FPaths::ProjectPluginsDir(), CurrentTaskName);
 
-			const FString Destination = FPaths::Combine(SubFolderPath, TEXT("modinfo.json"));
-
-			if (PlatformFile.CopyFile(*Destination, *ModInfoSource))
+			// Prefer <Plugin>/modinfo.json, else <Plugin>/Config/modinfo.json, else create one in <Plugin>/modinfo.json
+			FString ModInfoPath = FPaths::Combine(PluginFolder, TEXT("modinfo.json"));
+			if (!FPaths::FileExists(ModInfoPath))
 			{
-				AddLogMessage(TEXT("Copied modinfo.json into subfolder"));
+				const FString AltPath = FPaths::Combine(PluginFolder, TEXT("Config/modinfo.json"));
+				if (FPaths::FileExists(AltPath))
+				{
+					ModInfoPath = AltPath;
+				}
+				else
+				{
+					// Create a minimal modinfo.json so we can refresh/populate assets
+					ModInfoPath = FPaths::Combine(PluginFolder, TEXT("modinfo.json"));
+
+					TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+					Root->SetStringField(TEXT("ModName"), CurrentTaskName);
+					Root->SetStringField(TEXT("Description"), TEXT(""));
+					Root->SetStringField(TEXT("ProjectName"), FApp::GetProjectName());
+					Root->SetBoolField(TEXT("LayoutsEnabled"), false);
+					Root->SetArrayField(TEXT("Layouts"), {});
+					Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
+					Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
+
+					// Seed Assets from the plugin's Content folder
+					// (PopulateAssetsWithMaps adds Map, Blueprint, Model[Static/Skeletal], Material/Instances)
+					PopulateAssetsWithMaps(Root, PluginFolder, CurrentTaskName);
+
+					FString OutJson;
+					const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+					FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+					FFileHelper::SaveStringToFile(OutJson, *ModInfoPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+				}
+			}
+
+			// Refresh/update fields AND repopulate the Assets list before exporting
+			if (UpdateModInfoJson(ModInfoPath, CurrentTaskName, TEXT(""), PluginFolder))
+			{
+				AddLogMessage(FString::Printf(TEXT("Updated modinfo.json (assets) for \"%s\""), *CurrentTaskName));
 			}
 			else
 			{
-				AddLogMessage(TEXT("Error: Failed to copy modinfo.json into subfolder"));
+				AddLogMessage(FString::Printf(TEXT("Warning: Failed to update modinfo.json for \"%s\""), *CurrentTaskName));
 			}
-		}
-		else
-		{
-			AddLogMessage(TEXT("Warning: modinfo.json not found in plugin folder"));
+
+			// Copy the refreshed file to the output subfolder
+			const FString SubFolderPath = FPaths::Combine(OutputPath, CurrentTaskName);
+			IFileManager::Get().MakeDirectory(*SubFolderPath, /*Tree=*/true);
+
+			const FString Destination = FPaths::Combine(SubFolderPath, TEXT("modinfo.json"));
+			if (PlatformFile.CopyFile(*Destination, *ModInfoPath))
+			{
+				AddLogMessage(TEXT("Wrote refreshed modinfo.json to output folder"));
+			}
+			else
+			{
+				AddLogMessage(TEXT("Error: Failed to copy refreshed modinfo.json to output folder"));
+			}
 		}
 
 		AddLogMessage(TEXT("All builds finished"));
