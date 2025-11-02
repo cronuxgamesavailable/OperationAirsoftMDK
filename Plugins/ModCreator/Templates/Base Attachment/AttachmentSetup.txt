@@ -1,0 +1,22 @@
+Please keep in mind this is subject to change.
+
+Mesh Name - ModelName_AttachmentType
+Material Names - ModelName_ColorName (dont include the attachment type)
+
+Here are all the current attachment types:
+
+Rifle:
+
+Rifle_Mag
+Rifle_Scope (Iron Sight
+Rifle_BarrelEnd (Tracer, Orange Tip, ect)
+Rifle_Barrel
+Rifle_Upper
+Rifle_Lower
+Rifle_ChargingHandle
+Rifle_Grip
+Rifle_OuterBarrel (Picatinny rail)
+Rifle_StockHolder (BufferTube)
+Rifle_Stock
+Rifle_Trigger
+Rifle_Tank
