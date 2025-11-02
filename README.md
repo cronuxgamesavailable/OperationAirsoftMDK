@@ -1,6 +1,6 @@
 # Operation Airsoft MDK (Mod Development Kit) 🎯
 
-Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.2 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
+Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.3 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
 
 > ⚠️ **Note:** This repository contains *the plugin and templates*.  
 > You can integrate it into your own Unreal Engine 5.4 project to enable mod packaging features.  
@@ -15,7 +15,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.2 –
 - 📁 **Clean Output Structure** – Copies cooked files and metadata into organized mod folders
 - 🔥 **Cooking Support** – Cook selected assets before packaging directly from the UI  
 - 📦 **.PAK packaging support** - Package and run the mods you create within Operation Airsoft!
-- ⚙️ **Mod Types** – Maps and Layouts (Check todo for future plans)
+- ⚙️ **Mod Types** – Maps, Layouts and Attachments (Check todo for future plans)
 
 ---
 
@@ -23,7 +23,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.2 –
 
 These are planned or upcoming features for the MDK:
 
-- ⚙️ Support for Multiple Mod Types – Add Gun Parts and Clothes as a template.
+- ⚙️ Support for Multiple Mod Types – Add Clothes as a template.
 - 🧪 Add mod validator (e.g. check for missing assets, naming issues)
 - ☁️ Steam Workshop integration (upload mods directly)
 - 💬 Localization/translation support for mod metadata
