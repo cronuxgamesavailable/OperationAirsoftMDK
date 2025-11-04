@@ -25,6 +25,151 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Modules/ModuleManager.h"
+#include "Misc/PackageName.h"
+#include "Engine/UserDefinedEnum.h"
+
+// --- NEW: helpers for map/attachment selection & enum read ---
+#include "UObject/UObjectGlobals.h"
+#include "UObject/UnrealType.h"
+#include "UObject/Package.h"
+
+static TArray<TSharedPtr<FString>> GAttachmentTypes;
+static TSharedPtr<FString> GSelectedAttachmentType;
+
+static bool FillFromEnum(UEnum* Enum)
+{
+    if (!Enum) return false;
+
+    const int32 Count = Enum->NumEnums();
+    for (int32 i = 0; i < Count; ++i)
+    {
+        if (Enum->HasMetaData(TEXT("Hidden"), i)) continue;
+        const FString Name = Enum->GetNameStringByIndex(i);
+        if (!Name.IsEmpty())
+        {
+            GAttachmentTypes.Add(MakeShared<FString>(Name));
+        }
+    }
+    return GAttachmentTypes.Num() > 0;
+}
+
+// --- Mount /Templates/extracontent/Content as /ModTemplates/ --- //
+static bool GTemplatesMounted = false;
+
+static void EnsureTemplatesMount()
+{
+    if (GTemplatesMounted)
+        return;
+
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
+    if (!Plugin.IsValid())
+        return;
+
+    const FString RealPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content");
+    if (!FPaths::DirectoryExists(RealPath))
+        return;
+
+    const FString MountPoint = TEXT("/ModTemplates/");
+    if (!FPackageName::MountPointExists(MountPoint))
+    {
+        FPackageName::RegisterMountPoint(MountPoint, RealPath);
+    }
+
+    GTemplatesMounted = true;
+}
+
+// Load attachment types from a JSON file at:
+//   <ModCreator Plugin>/Templates/extracontent/attachment_types.json
+// Accepts either:
+//   ["Sight","Grip","Stock","Muzzle","Magazine"]
+// or
+//   { "AttachmentTypes": ["Sight","Grip",...] }
+static bool LoadAttachmentTypesFromJson()
+{
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
+    if (!Plugin.IsValid())
+        return false;
+
+    const FString JsonPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content/attachment_types.json");
+    if (!FPaths::FileExists(JsonPath))
+        return false;
+
+    FString JsonStr;
+    if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath))
+        return false;
+
+    TSharedPtr<FJsonValue> RootVal;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+    if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
+        return false;
+
+    auto Push = [](const FString& Name)
+        {
+            if (!Name.IsEmpty())
+                GAttachmentTypes.Add(MakeShared<FString>(Name));
+        };
+
+    if (RootVal->Type == EJson::Array)
+    {
+        const TArray<TSharedPtr<FJsonValue>>& Arr = RootVal->AsArray();
+        for (const TSharedPtr<FJsonValue>& V : Arr)
+        {
+            Push(V->AsString());
+        }
+    }
+    else if (RootVal->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Obj = RootVal->AsObject();
+        const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
+
+        // Case-insensitive keys allowed
+        static const TCHAR* Keys[] = { TEXT("AttachmentTypes"), TEXT("attachmenttypes"), TEXT("types") };
+        for (const TCHAR* K : Keys)
+        {
+            if (Obj->TryGetArrayField(FStringView(K), ArrPtr) && ArrPtr)
+            {
+                for (const TSharedPtr<FJsonValue>& V : *ArrPtr)
+                {
+                    Push(V->AsString());
+                }
+                break;
+            }
+        }
+    }
+
+    return GAttachmentTypes.Num() > 0;
+}
+
+static void BuildAttachmentTypesSource()
+{
+    GAttachmentTypes.Reset();
+    GSelectedAttachmentType.Reset();
+
+    // 1) JSON first (Templates/extracontent/attachment_types.json)
+    if (!LoadAttachmentTypesFromJson())
+    {
+        // 2) Fall back to a project/global enum named EAttachmentType
+        if (UEnum* Enum = FindObject<UEnum>(nullptr, TEXT("EAttachmentType")))
+        {
+            FillFromEnum(Enum);
+        }
+    }
+
+    // 3) Final fallback: sane defaults
+    if (GAttachmentTypes.Num() == 0)
+    {
+        static const TCHAR* Defaults[] = { TEXT("Sight"), TEXT("Grip"), TEXT("Stock"), TEXT("Muzzle"), TEXT("Magazine") };
+        for (const TCHAR* S : Defaults)
+        {
+            GAttachmentTypes.Add(MakeShared<FString>(FString(S)));
+        }
+    }
+
+    if (GAttachmentTypes.Num() > 0)
+    {
+        GSelectedAttachmentType = GAttachmentTypes[0];
+    }
+}
 
 const FName FModCreatorCreateWindow::TabName(TEXT("ModCreator_CreateTab"));
 
@@ -314,6 +459,8 @@ TSharedRef<SDockTab> FModCreatorCreateWindow::SpawnTab(const FSpawnTabArgs& Args
 void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
 {
     ScanTemplates();
+    EnsureTemplatesMount();
+    BuildAttachmentTypesSource();
 
     ChildSlot
         [
@@ -470,33 +617,48 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
 
 TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
 {
-    // Build the list widget of checkboxes once (used inside the dropdown)
+    // Build the list widget of checkboxes once (used inside the dropdown) – unchanged
     TSharedRef<SVerticalBox> ExtraList = SNew(SVerticalBox);
     if (ExtraAssetRelPaths.Num() > 0)
     {
         for (const FString& Rel : ExtraAssetRelPaths)
         {
             const FString NiceName = FPaths::GetBaseFilename(Rel); // no .uasset
-            ExtraList->AddSlot().AutoHeight().Padding(0, 2)
+            ExtraList->AddSlot()
+                .AutoHeight()
+                .Padding(0, 2)
                 [
                     SNew(SCheckBox)
                         .OnCheckStateChanged_Lambda([this, Rel](ECheckBoxState State)
                             {
-                                if (State == ECheckBoxState::Checked) { ExtraSelectedRelPaths.Add(Rel); }
-                                else { ExtraSelectedRelPaths.Remove(Rel); }
+                                if (State == ECheckBoxState::Checked)
+                                {
+                                    ExtraSelectedRelPaths.Add(Rel);
+                                }
+                                else
+                                {
+                                    ExtraSelectedRelPaths.Remove(Rel);
+                                }
                             })
-                        .Content()[SNew(STextBlock).Text(FText::FromString(NiceName))]
+                        .Content()
+                        [
+                            SNew(STextBlock).Text(FText::FromString(NiceName))
+                        ]
                 ];
         }
     }
 
+    // Common footer container
     return SNew(SVerticalBox)
 
         // Mod Name
-        + SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 4)
         [
             SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().FillWidth(1.f)
+                + SHorizontalBox::Slot()
+                .FillWidth(1.f)
                 [
                     SNew(SEditableTextBox)
                         .HintText(NSLOCTEXT("ModCreator", "NameHint", "Mod Name"))
@@ -505,16 +667,21 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
         ]
 
     // Author / Description
-    + SVerticalBox::Slot().AutoHeight().Padding(0, 6)
+    + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 6)
         [
             SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().FillWidth(0.5f).Padding(0, 0, 6, 0)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(0, 0, 6, 0)
                 [
                     SNew(SEditableTextBox)
                         .HintText(NSLOCTEXT("ModCreator", "Author", "Author"))
                         .OnTextChanged_Lambda([this](const FText& T) { AuthorText = T; })
                 ]
-                + SHorizontalBox::Slot().FillWidth(0.5f)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
                 [
                     SNew(SEditableTextBox)
                         .HintText(NSLOCTEXT("ModCreator", "Description", "Description"))
@@ -522,38 +689,101 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
                 ]
         ]
 
-    // + Extra Content (only when Templates/extracontent exists)
-    + SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+    // --- Attachment Type (only when "Base Attachment" template is selected) ---
+    + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 6)
         [
-            bHasExtraContent
-                ? StaticCastSharedRef<SWidget>(
+            SNew(SVerticalBox)
+                .Visibility_Lambda([this]()
+                    {
+                        const bool bAttachment =
+                            TemplateItems.IsValidIndex(SelectedIndex) &&
+                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Attachment"), ESearchCase::IgnoreCase);
+                        return bAttachment ? EVisibility::Visible : EVisibility::Collapsed;
+                    })
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
+                    SNew(STextBlock).Text(FText::FromString(TEXT("Attachment Type")))
+                ]
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 4)
+                [
+                    SNew(SComboBox<TSharedPtr<FString>>)
+                        .OptionsSource(&GAttachmentTypes)
+                        .InitiallySelectedItem(GAttachmentTypes.Num() > 0 ? GAttachmentTypes[0] : TSharedPtr<FString>())
+                        .OnSelectionChanged_Lambda([](TSharedPtr<FString> Sel, ESelectInfo::Type)
+                            {
+                                GSelectedAttachmentType = Sel;
+                            })
+                        .OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+                            {
+                                return SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? *Item : TEXT("")));
+                            })
+                        [
+                            SNew(STextBlock)
+                                .Text_Lambda([]()
+                                    {
+                                        return FText::FromString(GSelectedAttachmentType.IsValid() ? *GSelectedAttachmentType : TEXT("(select)"));
+                                    })
+                        ]
+                ]
+        ]
+
+    // + Extra Content (show ONLY for Base Map)
+    + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 4)
+        [
+            SNew(SVerticalBox)
+                .Visibility_Lambda([this]()
+                    {
+                        const bool bMap =
+                            TemplateItems.IsValidIndex(SelectedIndex) &&
+                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Map"), ESearchCase::IgnoreCase);
+                        const bool bShow = bHasExtraContent && bMap;
+                        return bShow ? EVisibility::Visible : EVisibility::Collapsed;
+                    })
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
                     SNew(SExpandableArea)
-                    .AreaTitle(NSLOCTEXT("ModCreator", "ExtraContentHeader", "+ Extra Content"))
-                    .InitiallyCollapsed(true)
-                    .BodyContent()
-                    [
-                        SNew(SScrollBox)
-                            + SScrollBox::Slot()[ExtraList]
-                    ])
-                : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+                        .AreaTitle(NSLOCTEXT("ModCreator", "ExtraContentHeader", "+ Extra Content"))
+                        .InitiallyCollapsed(true)
+                        .BodyContent()
+                        [
+                            SNew(SScrollBox)
+                                + SScrollBox::Slot()[ExtraList]
+                        ]
+                ]
         ]
 
     // Options + Create button
-    + SVerticalBox::Slot().AutoHeight().Padding(0, 6)
+    + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 6)
         [
             SNew(SHorizontalBox)
-                + SHorizontalBox::Slot().AutoWidth()
+                + SHorizontalBox::Slot()
+                .AutoWidth()
                 [
-                    SNew(SCheckBox).IsChecked(ECheckBoxState::Checked)
+                    SNew(SCheckBox)
+                        .IsChecked(ECheckBoxState::Checked)
                         .Content()[SNew(STextBlock).Text(NSLOCTEXT("ModCreator", "ShowOnStartup", "Show on Startup"))]
                 ]
-                + SHorizontalBox::Slot().AutoWidth().Padding(12, 0, 0, 0)
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(12, 0, 0, 0)
                 [
-                    SNew(SCheckBox).IsChecked(ECheckBoxState::Checked)
+                    SNew(SCheckBox)
+                        .IsChecked(ECheckBoxState::Checked)
                         .Content()[SNew(STextBlock).Text(NSLOCTEXT("ModCreator", "ShowContentDir", "Show Content Directory"))]
                 ]
                 + SHorizontalBox::Slot().FillWidth(1.f)[SNew(SSpacer)]
-                + SHorizontalBox::Slot().AutoWidth()
+                + SHorizontalBox::Slot()
+                .AutoWidth()
                 [
                     SNew(SButton)
                         .IsEnabled_Lambda([this]() { return CanCreate(); })
@@ -573,20 +803,41 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
     if (!CanCreate())
         return FReply::Handled();
 
-    const FString ModName = SanitizeName(ModNameText.ToString());
+    const FString RawModName = SanitizeName(ModNameText.ToString());
     const FString Author = AuthorText.ToString();
     const FString Desc = DescriptionText.ToString();
+
+    // Detect if the selected tile is an Attachment template
+    const bool bIsAttachmentTemplate =
+        TemplateItems.IsValidIndex(SelectedIndex) &&
+        TemplateItems[SelectedIndex].Name.Contains(TEXT("Attachment"), ESearchCase::IgnoreCase);
+
+    // Final name (append _{AttachmentType} when making an Attachment)
+    FString FinalModName = RawModName;
+    if (bIsAttachmentTemplate && GSelectedAttachmentType.IsValid())
+    {
+        FString Suffix = *GSelectedAttachmentType;   // set by the dropdown
+        Suffix.ReplaceInline(TEXT(" "), TEXT(""));   // keep folder/object names clean
+        FinalModName = RawModName + TEXT("_") + Suffix;
+    }
+
     const FString TemplateDir = TemplateItems[SelectedIndex].Path;
 
-    if (CreatePluginFromTemplate(TemplateDir, ModName, Author, Desc))
+    if (CreatePluginFromTemplate(TemplateDir, FinalModName, Author, Desc))
     {
-        FMessageDialog::Open(EAppMsgType::Ok,
-            FText::Format(NSLOCTEXT("ModCreator", "CreatedOK", "Mod '{0}' was created under Plugins. You may need to restart the editor to load the new plugin."), FText::FromString(ModName)));
+        FMessageDialog::Open(
+            EAppMsgType::Ok,
+            FText::Format(
+                NSLOCTEXT("ModCreator", "CreatedOK",
+                    "Mod '{0}' was created under Plugins. You may need to restart the editor to load the new plugin."),
+                FText::FromString(FinalModName)));
     }
     else
     {
-        FMessageDialog::Open(EAppMsgType::Ok,
-            NSLOCTEXT("ModCreator", "CreateFailed", "Failed to create the mod. Check the Output Log for details."));
+        FMessageDialog::Open(
+            EAppMsgType::Ok,
+            NSLOCTEXT("ModCreator", "CreateFailed",
+                "Failed to create the mod. Check the Output Log for details."));
     }
 
     return FReply::Handled();

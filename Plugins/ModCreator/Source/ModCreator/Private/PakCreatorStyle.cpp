@@ -44,17 +44,38 @@ const FVector2D Icon40x40(40.0f, 40.0f);
 
 TSharedRef<FSlateStyleSet> FPakCreatorStyle::Create()
 {
-	TSharedRef<FSlateStyleSet> Style = MakeShareable(new FSlateStyleSet("PakCreatorStyle"));
-	Style->SetContentRoot(IPluginManager::Get().FindPlugin("PakCreator")->GetBaseDir() / TEXT("Resources"));
+    TSharedRef<FSlateStyleSet> Style = MakeShareable(new FSlateStyleSet("PakCreatorStyle"));
 
-	// --- point the style to THIS plugin’s Resources folder ---
-	const FString ContentDir =
-		IPluginManager::Get().FindPlugin(TEXT("ModCreator"))->GetBaseDir() / TEXT("Resources");
-	Style->SetContentRoot(ContentDir);
+    // Always resolve a REAL plugin — use ModCreator (where the Resources live)
+    FString ResourcesDir;
 
-	Style->Set("PakCreator.OpenPluginWindow", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), Icon40x40));
+    if (TSharedPtr<IPlugin> ModCreator = IPluginManager::Get().FindPlugin(TEXT("ModCreator")))
+    {
+        ResourcesDir = ModCreator->GetBaseDir() / TEXT("Resources");
+    }
+    else if (TSharedPtr<IPlugin> PakCreator = IPluginManager::Get().FindPlugin(TEXT("PakCreator")))
+    {
+        // Optional: only if you truly ship a second plugin named PakCreator
+        ResourcesDir = PakCreator->GetBaseDir() / TEXT("Resources");
+    }
+    else
+    {
+        // Final fallback so we never crash even on misinstalls
+        ResourcesDir = FPaths::EngineContentDir() / TEXT("Slate");
+    }
 
-	return Style;
+    Style->SetContentRoot(ResourcesDir);
+
+    const FVector2D Icon40(40.f, 40.f);
+    // Use the PNGs you actually have in /Resources
+    Style->Set("PakCreator.OpenPluginWindow",
+        new FSlateImageBrush(Style->RootToContentDir(TEXT("ButtonIcon_40x"), TEXT(".png")), Icon40));
+    Style->Set("PakCreator.Create.Large",
+        new FSlateImageBrush(Style->RootToContentDir(TEXT("CreateButton_40x"), TEXT(".png")), Icon40));
+    Style->Set("PakCreator.Package.Large",
+        new FSlateImageBrush(Style->RootToContentDir(TEXT("PackageButton"), TEXT(".png")), Icon40));
+
+    return Style;
 }
 
 #undef IMAGE_BRUSH
