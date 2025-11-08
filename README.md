@@ -34,6 +34,8 @@ These are planned or upcoming features for the MDK:
 
 Follow these simple steps to set up the MDK in your Unreal Engine project:
 
+(Video Tutorials - https://www.youtube.com/playlist?list=PLOnU8Ej5ADnX6cwLcu_SOZ8BUCi-3V6N5)
+
 1. **Create a new Project** - Name it **ModMaker** (VERY Important)
 2. **Find your Project Root** – This is the folder containing your `.uproject` file.  
 3. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
