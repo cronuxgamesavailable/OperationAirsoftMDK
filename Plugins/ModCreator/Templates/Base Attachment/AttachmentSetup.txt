@@ -8,7 +8,7 @@ Here are all the current attachment types:
 Rifle:
 
 Rifle_Mag
-Rifle_Scope (Iron Sights, Scopes, ect)
+Rifle_Scope (Iron Sight
 Rifle_BarrelEnd (Tracer, Orange Tip, ect)
 Rifle_Barrel
 Rifle_Upper

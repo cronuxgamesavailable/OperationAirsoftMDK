@@ -892,7 +892,7 @@ FReply FPakCreatorWindow::CreateButtonPressed()
 		NumPluginBuilds++;
 	}
 
-	AddLogMessage(FString::Printf(TEXT("Building %i plugin%s"), NumPluginBuilds, NumPluginBuilds > 1 ? TEXT("s") : TEXT("")));
+	AddLogMessage(FString::Printf(TEXT("Building %i Mod%s"), NumPluginBuilds, NumPluginBuilds > 1 ? TEXT("s") : TEXT("")));
 	AddLogMessage(TEXT("Notice: Building can take longer on the first run due to shaders compiling. Please be patient."));
 
 	// Start off first build
