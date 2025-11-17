@@ -41,7 +41,7 @@ Follow these simple steps to set up the MDK in your Unreal Engine project:
 3. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
 4. **Copy the Extra Content Plugin** - Place **extracontent** folder into: ProjectRoot/Plugins/
 5. **Restart Unreal Engine** – The plugin will now appear in the Editor under the Mod Tools section.
-6. **Open the Project Settings** - Disable `Share Material Shader Code` and thats it!
+6. **Open the Project Settings** - Disable `Share Material Shader Code` and `Use Io Store`, thats it!
 
 ---
 
