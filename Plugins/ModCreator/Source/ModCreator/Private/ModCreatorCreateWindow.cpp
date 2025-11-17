@@ -36,6 +36,10 @@
 static TArray<TSharedPtr<FString>> GAttachmentTypes;
 static TSharedPtr<FString> GSelectedAttachmentType;
 
+static TArray<TSharedPtr<FString>> GClothingTypes;
+static TSharedPtr<FString> GSelectedClothingType;
+
+
 static bool FillFromEnum(UEnum* Enum)
 {
     if (!Enum) return false;
@@ -79,7 +83,7 @@ static void EnsureTemplatesMount()
 }
 
 // Load attachment types from a JSON file at:
-//   <ModCreator Plugin>/Templates/extracontent/attachment_types.json
+//   <ModCreator Plugin>/Templates/extracontent/Content/attachment_types.json
 // Accepts either:
 //   ["Sight","Grip","Stock","Muzzle","Magazine"]
 // or
@@ -145,7 +149,7 @@ static void BuildAttachmentTypesSource()
     GAttachmentTypes.Reset();
     GSelectedAttachmentType.Reset();
 
-    // 1) JSON first (Templates/extracontent/attachment_types.json)
+    // 1) JSON first (Templates/extracontent/Content/attachment_types.json)
     if (!LoadAttachmentTypesFromJson())
     {
         // 2) Fall back to a project/global enum named EAttachmentType
@@ -168,6 +172,115 @@ static void BuildAttachmentTypesSource()
     if (GAttachmentTypes.Num() > 0)
     {
         GSelectedAttachmentType = GAttachmentTypes[0];
+    }
+}
+
+// Load clothing types from a JSON file at:
+//   <ModCreator Plugin>/Templates/extracontent/Content/clothes_types.json
+// Accepts either:
+//   ["Mask","Shoes","Gloves",...]
+// or
+//   { "ClothingTypes": ["Mask","Shoes",...] }
+static bool LoadClothingTypesFromJson()
+{
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
+    if (!Plugin.IsValid())
+        return false;
+
+    // NOTE: file name as requested: clothes_types.json
+    const FString JsonPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content/clothes_types.json");
+    if (!FPaths::FileExists(JsonPath))
+        return false;
+
+    FString JsonStr;
+    if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath))
+        return false;
+
+    TSharedPtr<FJsonValue> RootVal;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+    if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
+        return false;
+
+    auto Push = [](const FString& Name)
+        {
+            if (!Name.IsEmpty())
+                GClothingTypes.Add(MakeShared<FString>(Name));
+        };
+
+    if (RootVal->Type == EJson::Array)
+    {
+        const TArray<TSharedPtr<FJsonValue>>& Arr = RootVal->AsArray();
+        for (const TSharedPtr<FJsonValue>& V : Arr)
+        {
+            Push(V->AsString());
+        }
+    }
+    else if (RootVal->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Obj = RootVal->AsObject();
+        const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
+
+        // Case-insensitive keys allowed
+        static const TCHAR* Keys[] = { TEXT("ClothingTypes"), TEXT("clothingtypes"), TEXT("types") };
+        for (const TCHAR* K : Keys)
+        {
+            if (Obj->TryGetArrayField(FStringView(K), ArrPtr) && ArrPtr)
+            {
+                for (const TSharedPtr<FJsonValue>& V : *ArrPtr)
+                {
+                    Push(V->AsString());
+                }
+                break;
+            }
+        }
+    }
+
+    return GClothingTypes.Num() > 0;
+}
+
+static void BuildClothingTypesSource()
+{
+    GClothingTypes.Reset();
+    GSelectedClothingType.Reset();
+
+    // 1) JSON first (Templates/extracontent/Content/clothes_types.json)
+    if (!LoadClothingTypesFromJson())
+    {
+        // 2) Optional: fall back to a project/global enum named EClothingType
+        if (UEnum* Enum = FindObject<UEnum>(nullptr, TEXT("EClothingType")))
+        {
+            // Reuse the same helper if you have it, or inline your own fill logic.
+            // Assuming FillFromEnum can be reused for clothing if it just pushes strings:
+            TArray<TSharedPtr<FString>> Temp;
+            FillFromEnum(Enum); // if FillFromEnum currently fills GAttachmentTypes, you can
+            // instead make a new FillFromEnumIntoArray(Enum, GClothingTypes).
+        }
+    }
+
+    // 3) Final fallback: hard-coded defaults (your clothing list)
+    if (GClothingTypes.Num() == 0)
+    {
+        static const TCHAR* Defaults[] =
+        {
+            TEXT("Mask"),
+            TEXT("Shoes"),
+            TEXT("Gloves"),
+            TEXT("Shirt"),
+            TEXT("Pants"),
+            TEXT("KneePads"),
+            TEXT("ElbowPads"),
+            TEXT("Vest")
+        };
+
+        for (const TCHAR* S : Defaults)
+        {
+            GClothingTypes.Add(MakeShared<FString>(FString(S)));
+        }
+    }
+
+    if (GClothingTypes.Num() > 0)
+    {
+        GSelectedClothingType = GClothingTypes[0];
     }
 }
 
@@ -461,6 +574,7 @@ void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
     ScanTemplates();
     EnsureTemplatesMount();
     BuildAttachmentTypesSource();
+    BuildClothingTypesSource();
 
     ChildSlot
         [
@@ -732,6 +846,49 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
                 ]
         ]
 
+    // --- Clothing Type (only when "Base Clothes" template is selected) ---
+    + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0, 6)
+        [
+            SNew(SVerticalBox)
+                .Visibility_Lambda([this]()
+                    {
+                        const bool bClothes =
+                            TemplateItems.IsValidIndex(SelectedIndex) &&
+                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Clothes"), ESearchCase::IgnoreCase);
+                        return bClothes ? EVisibility::Visible : EVisibility::Collapsed;
+                    })
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
+                    SNew(STextBlock).Text(FText::FromString(TEXT("Clothing Type")))
+                ]
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 4)
+                [
+                    SNew(SComboBox<TSharedPtr<FString>>)
+                        .OptionsSource(&GClothingTypes)
+                        .InitiallySelectedItem(GClothingTypes.Num() > 0 ? GClothingTypes[0] : TSharedPtr<FString>())
+                        .OnSelectionChanged_Lambda([](TSharedPtr<FString> Sel, ESelectInfo::Type)
+                            {
+                                GSelectedClothingType = Sel;
+                            })
+                        .OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
+                            {
+                                return SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? *Item : TEXT("")));
+                            })
+                        [
+                            SNew(STextBlock)
+                                .Text_Lambda([]()
+                                    {
+                                        return FText::FromString(GSelectedClothingType.IsValid() ? *GSelectedClothingType : TEXT("(select)"));
+                                    })
+                        ]
+                ]
+        ]
+
     // + Extra Content (show ONLY for Base Map)
     + SVerticalBox::Slot()
         .AutoHeight()
@@ -807,17 +964,28 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
     const FString Author = AuthorText.ToString();
     const FString Desc = DescriptionText.ToString();
 
-    // Detect if the selected tile is an Attachment template
+    // Detect if the selected tile is an Attachment or Clothes template
     const bool bIsAttachmentTemplate =
         TemplateItems.IsValidIndex(SelectedIndex) &&
         TemplateItems[SelectedIndex].Name.Contains(TEXT("Attachment"), ESearchCase::IgnoreCase);
 
-    // Final name (append _{AttachmentType} when making an Attachment)
+    const bool bIsClothingTemplate =
+        TemplateItems.IsValidIndex(SelectedIndex) &&
+        TemplateItems[SelectedIndex].Name.Contains(TEXT("Clothes"), ESearchCase::IgnoreCase);
+
+    // Final name (append _{Type} when making an Attachment or Clothes mod)
     FString FinalModName = RawModName;
+
     if (bIsAttachmentTemplate && GSelectedAttachmentType.IsValid())
     {
-        FString Suffix = *GSelectedAttachmentType;   // set by the dropdown
+        FString Suffix = *GSelectedAttachmentType;   // from Attachment dropdown
         Suffix.ReplaceInline(TEXT(" "), TEXT(""));   // keep folder/object names clean
+        FinalModName = RawModName + TEXT("_") + Suffix;
+    }
+    else if (bIsClothingTemplate && GSelectedClothingType.IsValid())
+    {
+        FString Suffix = *GSelectedClothingType;     // from Clothing dropdown
+        Suffix.ReplaceInline(TEXT(" "), TEXT(""));
         FinalModName = RawModName + TEXT("_") + Suffix;
     }
 

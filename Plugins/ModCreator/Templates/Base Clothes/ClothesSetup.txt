@@ -1,0 +1,17 @@
+Please keep in mind this is subject to change.
+
+Mesh Name - ModelName_ClothesType
+Material Names - ModelName_ColorName (dont include the item type)
+
+Here are all the current item types:
+
+Types:
+
+Mask
+Shoes
+Gloves
+Shirt
+Pants
+KneePads
+ElbowPads
+Vest
