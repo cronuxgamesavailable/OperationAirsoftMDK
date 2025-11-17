@@ -26,6 +26,7 @@ These are planned or upcoming features for the MDK:
 - ⚙️ Support for Multiple Mod Types – Add Clothes as a template.
 - 🧪 Add mod validator (e.g. check for missing assets, naming issues)
 - ☁️ Steam Workshop integration (upload mods directly)
+- ⚙️ Mod.io integration (upload mods directly)
 - 💬 Localization/translation support for mod metadata
 
 ---
