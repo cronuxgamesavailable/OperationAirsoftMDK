@@ -15,7 +15,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.4 –
 - 📁 **Clean Output Structure** – Copies cooked files and metadata into organized mod folders
 - 🔥 **Cooking Support** – Cook selected assets before packaging directly from the UI  
 - 📦 **.PAK packaging support** - Package and run the mods you create within Operation Airsoft!
-- ⚙️ **Mod Types** – Maps, Layouts and Attachments (Check todo for future plans)
+- ⚙️ **Mod Types** – Maps, Layouts, Clothes and Attachments (Check todo for future plans)
 
 ---
 
@@ -23,7 +23,6 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.4 –
 
 These are planned or upcoming features for the MDK:
 
-- ⚙️ Support for Multiple Mod Types – Add Clothes as a template.
 - 🧪 Add mod validator (e.g. check for missing assets, naming issues)
 - ☁️ Steam Workshop integration (upload mods directly)
 - ⚙️ Mod.io integration (upload mods directly)
