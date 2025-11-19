@@ -1014,9 +1014,22 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
 FString SModCreatorCreatePanel::SanitizeName(const FString& InName)
 {
     FString Out = InName;
+
+    // Replace spaces with underscores
+    Out.ReplaceInline(TEXT(" "), TEXT("_"));
+
+    // Lowercase (optional but you already had it)
     Out = Out.ToLower();
+
+    // Ensure file-safe characters
     FPaths::MakeValidFileName(Out);
-    if (Out.IsEmpty()) Out = TEXT("NewMod");
+
+    // Fallback if empty
+    if (Out.IsEmpty())
+    {
+        Out = TEXT("NewMod");
+    }
+
     return Out;
 }
 
