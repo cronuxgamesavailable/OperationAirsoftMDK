@@ -16,6 +16,7 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.5 –
 - 🔥 **Cooking Support** – Cook selected assets before packaging directly from the UI  
 - 📦 **.PAK packaging support** - Package and run the mods you create within Operation Airsoft!
 - ⚙️ **Mod Types** – Maps, Layouts, Clothes and Attachments (Check todo for future plans)
+- 🔔 **Update Reminder** – Remindes you when a new version of the MDK is available
 
 ---
 
@@ -41,7 +42,6 @@ Follow these simple steps to set up the MDK in your Unreal Engine project:
 3. **Copy the Plugin** – Place the **ModCreator** folder into: ProjectRoot/Plugins/
 4. **Copy the Extra Content Plugin** - Place **extracontent** folder into: ProjectRoot/Plugins/
 5. **Restart Unreal Engine** – The plugin will now appear in the Mod Tools section.
-If you see a message saying files need to be updated, just click Update. The editor will close (this is normal) — reopen the project afterward.
 
 ---
 
