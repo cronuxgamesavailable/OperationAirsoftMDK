@@ -22,7 +22,11 @@
             "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\moduledescriptor.h",
             "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\plugindisalloweddescriptor.h",
             "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\pluginreferencedescriptor.h",
-            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\versescope.h"
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\projects\\public\\versescope.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\online\\http\\public\\httpmodule.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\online\\http\\public\\interfaces\\ihttprequest.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\online\\http\\public\\interfaces\\ihttpbase.h",
+            "c:\\program files\\epic games\\ue_5.4\\engine\\source\\runtime\\online\\http\\public\\interfaces\\ihttpresponse.h"
         ],
         "ImportedModules": [],
         "ImportedHeaderUnits": []

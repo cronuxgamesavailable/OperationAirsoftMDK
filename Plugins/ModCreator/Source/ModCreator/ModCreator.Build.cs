@@ -23,7 +23,8 @@ public class ModCreator : ModuleRules
             "Json",
             "JsonUtilities",
             "InputCore", 
-            "Settings"
+            "Settings",
+            "HTTP"
         });
     }
 }

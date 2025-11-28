@@ -20,6 +20,11 @@
 #include "Serialization/JsonSerializer.h"
 #include "UnrealEdMisc.h"
 
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
+#include "HAL/PlatformProcess.h"
+
 static TSharedPtr<FPakCreatorWindow> GPakCreatorWindow;
 
 #define LOCTEXT_NAMESPACE "FModCreatorModule"
@@ -67,7 +72,7 @@ void FModCreatorModule::StartupModule()
         FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FModCreatorModule::RegisterMenus)
     );
 
-    RunPatchCheck();
+    CheckForMdkUpdate();
 }
 
 void FModCreatorModule::ShutdownModule()
@@ -154,6 +159,95 @@ void FModCreatorModule::OnCreateClicked() const
 void FModCreatorModule::OnPackageClicked() const
 {
     FGlobalTabmanager::Get()->TryInvokeTab(FName("PakCreatorWindow"));
+}
+
+void FModCreatorModule::CheckForMdkUpdate()
+{
+#if WITH_EDITOR
+    // 1. Load local version
+    TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
+    if (!Plugin.IsValid())
+    {
+        RunPatchCheck();
+        return;
+    }
+
+    const FString PluginDir = Plugin->GetBaseDir();
+    const FString LocalVersionPath = FPaths::Combine(PluginDir, TEXT("Patch/MDKVersion.txt"));
+
+    FString LocalVersion;
+    if (!FPaths::FileExists(LocalVersionPath) ||
+        !FFileHelper::LoadFileToString(LocalVersion, *LocalVersionPath))
+    {
+        RunPatchCheck();
+        return;
+    }
+
+    LocalVersion = LocalVersion.TrimStartAndEnd();
+
+    // 2. Remote version file on GitHub (CHANGE THIS TO YOUR REAL URL)
+    const FString RemoteVersionUrl = TEXT("https://raw.githubusercontent.com/cronuxgamesavailable/OperationAirsoftMDK/Plugin/Plugins/ModCreator/Patch/MDKVersion.txt");
+    const FString GitHubPageUrl = TEXT("https://github.com/cronuxgamesavailable/OperationAirsoftMDK");
+
+    auto RunPatch = []()
+        {
+            FModCreatorModule& Mod = FModuleManager::LoadModuleChecked<FModCreatorModule>("ModCreator");
+            Mod.RunPatchCheck();
+        };
+
+    // 3. Make HTTP request
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(RemoteVersionUrl);
+    Request->SetVerb(TEXT("GET"));
+    Request->SetHeader(TEXT("User-Agent"), TEXT("UnrealEngine-ModCreator"));
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [LocalVersion, GitHubPageUrl, RunPatch](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bSucceeded)
+        {
+            if (!bSucceeded || !Resp.IsValid() || Resp->GetResponseCode() != 200)
+            {
+                RunPatch();
+                return;
+            }
+
+            FString RemoteVersion = Resp->GetContentAsString().TrimStartAndEnd();
+
+            if (RemoteVersion.Equals(LocalVersion, ESearchCase::IgnoreCase))
+            {
+                RunPatch();
+            }
+            else
+            {
+                // 4. Show update popup
+                FText Msg = FText::Format(
+                    NSLOCTEXT(
+                        "ModCreatorUpdate",
+                        "UpdateMsg",
+                        "A newer version of MDK is available.\n\n"
+                        "Current version: {0}\n"
+                        "Latest version:  {1}\n\n"
+                        "Click 'Yes' to open GitHub and download it, or 'No' to skip."
+                    ),
+                    FText::FromString(LocalVersion),
+                    FText::FromString(RemoteVersion)
+                );
+
+                EAppReturnType::Type Result = FMessageDialog::Open(EAppMsgType::YesNo, Msg);
+
+                if (Result == EAppReturnType::Yes)
+                {
+                    FPlatformProcess::LaunchURL(*GitHubPageUrl, nullptr, nullptr);
+                }
+
+                // Continue to patch check regardless
+                RunPatch();
+            }
+        });
+
+    Request->ProcessRequest();
+#else
+    RunPatchCheck();
+#endif
 }
 
 void FModCreatorModule::RunPatchCheck()
@@ -278,11 +372,9 @@ void FModCreatorModule::RunPatchCheck()
         FileList += TEXT("\n - ") + P.Rel;
 
     FText Msg = FText::FromString(
-        TEXT("Some project files dont match the Mod Development Kit and need to be updated:\n") +
+        TEXT("Some project files dont match the MDK and need to be updated:\n") +
         FileList +
-        TEXT("\n\nIf you choose to update, the patch will be applied automatically. ")
-        TEXT("Unreal Engine will close immediately once the update begins — it may appear as a crash, but this is normal. ")
-        TEXT("Simply restart the project after the editor closes to complete the update.\n\n")
+        TEXT("\n\nIf you choose to update, the patch will be applied automatically. \n\n")
         TEXT("Would you like to update these files now?")
     );
 
