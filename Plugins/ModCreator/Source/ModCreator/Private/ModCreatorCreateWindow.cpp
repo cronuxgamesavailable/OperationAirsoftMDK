@@ -39,6 +39,11 @@ static TSharedPtr<FString> GSelectedAttachmentType;
 static TArray<TSharedPtr<FString>> GClothingTypes;
 static TSharedPtr<FString> GSelectedClothingType;
 
+// Folders that cannot be copied directly from extracontent and need manual steps.
+// Map: FolderName -> Instructions text shown in the popup.
+static TMap<FString, FString> GCantCopyFolderInstructions;
+static bool bCantCopyFoldersLoaded = false;
+
 
 static bool FillFromEnum(UEnum* Enum)
 {
@@ -238,6 +243,109 @@ static bool LoadClothingTypesFromJson()
     return GClothingTypes.Num() > 0;
 }
 
+// Load special-case folders from:
+static void EnsureCantCopyFoldersLoaded()
+{
+    if (bCantCopyFoldersLoaded)
+    {
+        return;
+    }
+    bCantCopyFoldersLoaded = true;
+
+    GCantCopyFolderInstructions.Reset();
+
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
+    if (!Plugin.IsValid())
+    {
+        return;
+    }
+
+    const FString JsonPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content/CantCopyDirectly.json");
+    if (!FPaths::FileExists(JsonPath))
+    {
+        return; // no file = no special folders
+    }
+
+    FString JsonStr;
+    if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath))
+    {
+        return;
+    }
+
+    TSharedPtr<FJsonValue> RootVal;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+    if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
+    {
+        return;
+    }
+
+    auto AddFolder = [](const FString& Name, const FString& Instructions)
+        {
+            const FString CleanName = Name.TrimStartAndEnd();
+            if (CleanName.IsEmpty())
+            {
+                return;
+            }
+
+            FString CleanInstructions = Instructions;
+            CleanInstructions.TrimStartAndEndInline();
+
+            if (CleanInstructions.IsEmpty())
+            {
+                CleanInstructions =
+                    TEXT("This content pack cannot be copied automatically.\n\n")
+                    TEXT("Please follow the manual install steps for this folder ")
+                    TEXT("(see the documentation or readme for details).");
+            }
+
+            GCantCopyFolderInstructions.Add(CleanName, CleanInstructions);
+        };
+
+    if (RootVal->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Obj = RootVal->AsObject();
+        const TArray<TSharedPtr<FJsonValue>>* FoldersArray = nullptr;
+
+        if (Obj->TryGetArrayField(TEXT("Folders"), FoldersArray) && FoldersArray)
+        {
+            for (const TSharedPtr<FJsonValue>& EntryVal : *FoldersArray)
+            {
+                if (!EntryVal.IsValid())
+                {
+                    continue;
+                }
+
+                if (EntryVal->Type == EJson::String)
+                {
+                    AddFolder(EntryVal->AsString(), TEXT(""));
+                }
+                else if (EntryVal->Type == EJson::Object)
+                {
+                    const TSharedPtr<FJsonObject> EntryObj = EntryVal->AsObject();
+                    FString Name, Instructions;
+                    if (EntryObj->TryGetStringField(TEXT("Name"), Name))
+                    {
+                        EntryObj->TryGetStringField(TEXT("Instructions"), Instructions);
+                        AddFolder(Name, Instructions);
+                    }
+                }
+            }
+        }
+    }
+    else if (RootVal->Type == EJson::Array)
+    {
+        // Simpler "['FolderA','FolderB']" at top-level
+        const TArray<TSharedPtr<FJsonValue>>& Arr = RootVal->AsArray();
+        for (const TSharedPtr<FJsonValue>& V : Arr)
+        {
+            if (V.IsValid())
+            {
+                AddFolder(V->AsString(), TEXT(""));
+            }
+        }
+    }
+}
+
 static void BuildClothingTypesSource()
 {
     GClothingTypes.Reset();
@@ -313,51 +421,173 @@ namespace
         return false;
     }
 
-    // Scan extracontent/Content for .uasset files (skip BPI_GameRules.uasset)
+
+    // Scan extracontent/Content for root .uasset files and first-level folders.
+    //  - Root .uasset files are listed normally (e.g. "BP_Flag.uasset")
+    //  - First-level folders are listed as a single entry using the marker "Folder:<FolderName>"
     static void GatherExtraUassets(const FString& ExtraTemplateDir, TArray<FString>& OutRelPaths)
     {
         OutRelPaths.Reset();
+
         const FString ContentDir = ExtraTemplateDir / TEXT("Content");
-        if (!FPaths::DirectoryExists(ContentDir)) return;
-
-        TArray<FString> Files;
-        IFileManager::Get().FindFilesRecursive(Files, *ContentDir, TEXT("*.uasset"), /*Files*/true, /*Dirs*/false);
-
-        for (const FString& Abs : Files)
+        if (!FPaths::DirectoryExists(ContentDir))
         {
-            FString Rel;
-            if (!MakeContentRelative(ContentDir, Abs, Rel)) continue;
-
-            const FString Base = FPaths::GetCleanFilename(Rel);
-            if (Base.Equals(TEXT("BPI_GameRules.uasset"), ESearchCase::IgnoreCase)) continue; // skip interface
-            OutRelPaths.Add(Rel); // keep folder + filename.uasset
+            return;
         }
+
+        IFileManager& FM = IFileManager::Get();
+
+        // 1) Root-level .uasset files in Content/
+        {
+            TArray<FString> RootFiles;
+            FM.FindFiles(
+                RootFiles,
+                *(ContentDir / TEXT("*.uasset")),
+                /*Files*/ true,
+                /*Dirs*/  false);
+
+            for (const FString& FileName : RootFiles)
+            {
+                // Root files are just the filename, relative to Content/
+                OutRelPaths.Add(FileName); // e.g. "BP_Flag.uasset"
+            }
+        }
+
+        // 2) First-level subfolders in Content/ (each becomes a single selectable entry)
+        FM.IterateDirectory(*ContentDir,
+            [&OutRelPaths](const TCHAR* Path, bool bIsDir) -> bool
+            {
+                if (!bIsDir)
+                {
+                    return true;
+                }
+
+                const FString FolderPath(Path);
+                const FString FolderName = FPaths::GetCleanFilename(FolderPath);
+
+                if (!FolderName.IsEmpty())
+                {
+                    // Marker format: "Folder:<FolderName>"
+                    OutRelPaths.Add(FString::Printf(TEXT("Folder:%s"), *FolderName));
+                }
+
+                return true;
+            });
     }
 
-    // Copy only the selected relative files from extracontent -> destination plugin Content/
+    // Copy selected extra content from extracontent -> destination plugin Content/.
+// Entries can be either:
+//   - "SomeAsset.uasset"           (single file under Content/)
+//   - "Folder:<FolderName>"        (entire folder Content/<FolderName>/...)
+// For folder entries, we copy the entire folder tree.
     static bool CopySelectedExtraContent(const FString& ExtraTemplateDir, const FString& DestPluginDir,
         const TSet<FString>& SelectedRelPaths)
     {
-        if (SelectedRelPaths.Num() == 0) return true;
+        if (SelectedRelPaths.Num() == 0)
+            return true;
 
         const FString SrcContent = ExtraTemplateDir / TEXT("Content");
         const FString DstContent = DestPluginDir / TEXT("Content");
 
         IFileManager& FM = IFileManager::Get();
+        IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
         bool bOk = true;
 
-        for (const FString& Rel : SelectedRelPaths)
-        {
-            const FString Src = FPaths::Combine(SrcContent, Rel);
-            const FString Dst = FPaths::Combine(DstContent, Rel);
+        static const FString FolderPrefix = TEXT("Folder:");
 
-            FM.MakeDirectory(*FPaths::GetPath(Dst), /*Tree*/true);
-            if (FM.Copy(*Dst, *Src) != ECopyResult::COPY_OK)
+        for (const FString& Entry : SelectedRelPaths)
+        {
+            // -------- Folder entry --------
+            if (Entry.StartsWith(FolderPrefix))
             {
-                UE_LOG(LogTemp, Error, TEXT("[ModCreator] Extra copy failed: %s -> %s"), *Src, *Dst);
-                bOk = false;
+                const FString FolderName = Entry.Mid(FolderPrefix.Len());
+                if (FolderName.IsEmpty())
+                {
+                    continue;
+                }
+
+                const FString SrcFolder = FPaths::Combine(SrcContent, FolderName);
+
+                if (!FPaths::DirectoryExists(SrcFolder))
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[ModCreator] Extra folder not found: %s"), *SrcFolder);
+                    continue;
+                }
+
+                TArray<FString> FilesInFolder;
+                FM.FindFilesRecursive(
+                    FilesInFolder,
+                    *SrcFolder,
+                    TEXT("*.*"),
+                    /*Files*/ true,
+                    /*Dirs*/ false);
+
+                for (const FString& SrcFile : FilesInFolder)
+                {
+                    // Compute path relative to SrcContent (so we keep the full folder tree)
+                    FString SrcRootNorm = SrcContent;
+                    FPaths::NormalizeDirectoryName(SrcRootNorm);
+
+                    FString RelFromContent = SrcFile;
+                    FPaths::NormalizeFilename(RelFromContent);
+
+                    if (RelFromContent.StartsWith(SrcRootNorm + TEXT("/")))
+                    {
+                        RelFromContent = RelFromContent.Mid(SrcRootNorm.Len() + 1);
+                    }
+                    else
+                    {
+                        // Windows backslash fallback
+                        FString RootBack = SrcRootNorm; RootBack.ReplaceInline(TEXT("/"), TEXT("\\"));
+                        FString RelBack = RelFromContent; RelBack.ReplaceInline(TEXT("/"), TEXT("\\"));
+                        if (RelBack.StartsWith(RootBack + TEXT("\\")))
+                        {
+                            RelFromContent = RelFromContent.Mid(SrcRootNorm.Len() + 1);
+                        }
+                    }
+
+                    const FString DstFile = FPaths::Combine(DstContent, RelFromContent);
+                    const FString DstDir = FPaths::GetPath(DstFile);
+
+                    if (!FM.MakeDirectory(*DstDir, /*Tree*/ true))
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("[ModCreator] Failed to create dir: %s"), *DstDir);
+                        bOk = false;
+                        continue;
+                    }
+
+                    if (!PF.CopyFile(*DstFile, *SrcFile))
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("[ModCreator] Extra folder copy failed: %s -> %s"), *SrcFile, *DstFile);
+                        bOk = false;
+                    }
+                }
+
+                UE_LOG(LogTemp, Log, TEXT("[ModCreator] Copied extra folder: %s"), *FolderName);
+            }
+            // -------- Single-file entry --------
+            else
+            {
+                const FString Rel = Entry; // e.g. "BP_Flag.uasset"
+                const FString SrcFile = FPaths::Combine(SrcContent, Rel);
+                const FString DstFile = FPaths::Combine(DstContent, Rel);
+
+                const FString DstDir = FPaths::GetPath(DstFile);
+                if (!FM.MakeDirectory(*DstDir, /*Tree*/ true))
+                {
+                    UE_LOG(LogTemp, Error, TEXT("[ModCreator] Failed to create dir: %s"), *DstDir);
+                    bOk = false;
+                    continue;
+                }
+
+                if (!PF.CopyFile(*DstFile, *SrcFile))
+                {
+                    UE_LOG(LogTemp, Error, TEXT("[ModCreator] Extra copy failed: %s -> %s"), *SrcFile, *DstFile);
+                    bOk = false;
+                }
             }
         }
+
         return bOk;
     }
 
@@ -731,22 +961,70 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
 
 TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
 {
-    // Build the list widget of checkboxes once (used inside the dropdown) – unchanged
+    // Build the list widget of checkboxes once (used inside the dropdown)
     TSharedRef<SVerticalBox> ExtraList = SNew(SVerticalBox);
     if (ExtraAssetRelPaths.Num() > 0)
     {
+        // Make sure we’ve read CantCopyDirectly.json
+        EnsureCantCopyFoldersLoaded();
+
         for (const FString& Rel : ExtraAssetRelPaths)
         {
-            const FString NiceName = FPaths::GetBaseFilename(Rel); // no .uasset
+            // Folder marker: "Folder:<Name>" – everything else is a normal asset
+            const bool bIsFolder = Rel.StartsWith(TEXT("Folder:"));
+            FString NiceName;
+            FString FolderName;
+
+            if (bIsFolder)
+            {
+                FolderName = Rel.Mid(7); // strip "Folder:"
+                NiceName = FolderName;
+            }
+            else
+            {
+                NiceName = FPaths::GetBaseFilename(Rel); // no .uasset
+            }
+
+            // Does this folder require special manual steps?
+            const bool bNeedsSpecialSteps = bIsFolder && GCantCopyFolderInstructions.Contains(FolderName);
+
             ExtraList->AddSlot()
                 .AutoHeight()
                 .Padding(0, 2)
                 [
                     SNew(SCheckBox)
-                        .OnCheckStateChanged_Lambda([this, Rel](ECheckBoxState State)
+                        // Check state is driven by ExtraSelectedRelPaths so we can auto-revert for special folders
+                        .IsChecked_Lambda([this, Rel]()
+                            {
+                                return ExtraSelectedRelPaths.Contains(Rel)
+                                    ? ECheckBoxState::Checked
+                                    : ECheckBoxState::Unchecked;
+                            })
+                        .OnCheckStateChanged_Lambda([this, Rel, bNeedsSpecialSteps, FolderName](ECheckBoxState State)
                             {
                                 if (State == ECheckBoxState::Checked)
                                 {
+                                    if (bNeedsSpecialSteps)
+                                    {
+                                        const FString* InstructionsPtr = GCantCopyFolderInstructions.Find(FolderName);
+                                        const FString Instructions = InstructionsPtr ? *InstructionsPtr : FString();
+
+                                        FMessageDialog::Open(
+                                            EAppMsgType::Ok,
+                                            Instructions.IsEmpty()
+                                            ? NSLOCTEXT(
+                                                "ModCreator",
+                                                "CantCopyDirectlyInfoDefault",
+                                                "This content pack cannot be copied automatically.\n\n"
+                                                "Please follow the manual install steps for this folder "
+                                                "(see the documentation or readme for details).")
+                                            : FText::FromString(Instructions)
+                                        );
+
+                                        // Do NOT add to ExtraSelectedRelPaths – binding will snap checkbox back.
+                                        return;
+                                    }
+
                                     ExtraSelectedRelPaths.Add(Rel);
                                 }
                                 else
@@ -754,9 +1032,50 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
                                     ExtraSelectedRelPaths.Remove(Rel);
                                 }
                             })
-                        .Content()
                         [
-                            SNew(STextBlock).Text(FText::FromString(NiceName))
+                            SNew(SHorizontalBox)
+
+                                // Left icon: folder vs asset
+                                + SHorizontalBox::Slot()
+                                .AutoWidth()
+                                .VAlign(VAlign_Center)
+                                .Padding(0, 0, 6, 0)
+                                [
+                                    bIsFolder
+                                        ? SNew(SImage)
+                                        .Image(FAppStyle::Get().GetBrush("ContentBrowser.AssetTreeFolderClosed"))
+                                        : SNew(SImage)
+                                        .Image(FAppStyle::Get().GetBrush("ContentBrowser.ColumnViewAssetIcon"))
+                                ]
+
+                            // Label text (same style for files & folders)
+                            + SHorizontalBox::Slot()
+                                .FillWidth(1.f)
+                                .VAlign(VAlign_Center)
+                                [
+                                    SNew(STextBlock)
+                                        .Text(FText::FromString(NiceName))
+                                        .ColorAndOpacity(FSlateColor(FLinearColor::White))
+                                        .Font(FAppStyle::Get().GetFontStyle("NormalText"))
+                                ]
+
+                                // Right-side warning icon for special folders
+                                + SHorizontalBox::Slot()
+                                .AutoWidth()
+                                .VAlign(VAlign_Center)
+                                .HAlign(HAlign_Right)
+                                .Padding(6, 0, 0, 0)
+                                [
+                                    bNeedsSpecialSteps
+                                        ? SNew(SImage)
+                                        .Image(FAppStyle::Get().GetBrush("Icons.Warning"))
+                                        .ToolTipText(NSLOCTEXT(
+                                            "ModCreator",
+                                            "CantCopyDirectlyTooltip",
+                                            "This folder requires manual install steps.\n"
+                                            "Click the checkbox to see instructions."))
+                                        : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+                                ]
                         ]
                 ];
         }
