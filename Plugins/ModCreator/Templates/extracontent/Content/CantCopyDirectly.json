@@ -2,7 +2,7 @@
   "Folders": [
     {
       "Name": "WeatherAndLandscape",
-      "Instructions": "This content pack cannot be auto-copied.\n\n1. Migrate the WeatherAndLandscape folder into your project using the Content Browser.\n2. Make sure it lives under /Game/WeatherAndLandscape.\n3. Save and fix up redirectors.\n4. Then use it directly in your maps."
+      "Instructions": "This content pack requires manual installation.\n\nBefore continuing, please close the Unreal Engine editor.\n\nHow to Install:\n1. Exit your Unreal project completely.\n2. Open your project's folder in File Explorer.\n3. Go to the /Plugins/ModCreator/Templates/extracontent/Content/ directory.\n4. Copy the entire 'WeatherAndLandscape' folder from the template into your project's Content folder.\n5. Reopen your Unreal project.\n6. In the Content Browser, locate the newly added WeatherAndLandscape folder.\n7. Drag the WeatherAndLandscape folder into your mod's Content folder (inside the Mod Creator panel).\n8. Once the editor finishes updating, click Save All.\n\nAfter this, the assets will be ready for use and can be packaged with your mod."
     }
   ]
 }
