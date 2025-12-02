@@ -1,0 +1,8 @@
+{
+  "Folders": [
+    {
+      "Name": "WeatherAndLandscape",
+      "Instructions": "This content pack cannot be auto-copied.\n\n1. Migrate the WeatherAndLandscape folder into your project using the Content Browser.\n2. Make sure it lives under /Game/WeatherAndLandscape.\n3. Save and fix up redirectors.\n4. Then use it directly in your maps."
+    }
+  ]
+}

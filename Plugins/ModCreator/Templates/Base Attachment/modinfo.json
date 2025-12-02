@@ -1,10 +1,12 @@
 {
   "ModName": "Base Attachment",
-  "Description": "A base attachment template. (txt file for instructions only",
+  "Description": "A base attachment template. (txt file for instructions only)",
   "Thumbnail": "Thumbnail.png",
   "ProjectName": "",
   "Assets": [],
   "LayoutsEnabled": true,
   "Layouts": [],
   "BuildRequirements": "CopyContent"
+  "IncludeAttachments": [],
+  "ExcludeAttachments": []
 }
