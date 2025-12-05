@@ -24,7 +24,8 @@ public class ModCreator : ModuleRules
             "JsonUtilities",
             "InputCore", 
             "Settings",
-            "HTTP"
+            "HTTP",
+            "UnrealEd"
         });
     }
 }

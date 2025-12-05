@@ -27,6 +27,7 @@
 #include "Modules/ModuleManager.h"
 #include "Misc/PackageName.h"
 #include "Engine/UserDefinedEnum.h"
+#include "UnrealEdMisc.h"
 
 // --- NEW: helpers for map/attachment selection & enum read ---
 #include "UObject/UObjectGlobals.h"
@@ -1312,12 +1313,19 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
 
     if (CreatePluginFromTemplate(TemplateDir, FinalModName, Author, Desc))
     {
-        FMessageDialog::Open(
-            EAppMsgType::Ok,
-            FText::Format(
-                NSLOCTEXT("ModCreator", "CreatedOK",
-                    "Mod '{0}' was created under Plugins. You may need to restart the editor to load the new plugin."),
-                FText::FromString(FinalModName)));
+        // Show message, then restart the editor as soon as the dialog is dismissed.
+        const FText Msg = FText::Format(
+            NSLOCTEXT("ModCreator", "CreatedOK",
+                "Mod '{0}' was created under Plugins.\n"
+                "The editor will now restart to load the new plugin."),
+            FText::FromString(FinalModName));
+
+        FMessageDialog::Open(EAppMsgType::Ok, Msg);
+
+#if WITH_EDITOR
+        // This handles closing and relaunching the editor.
+        FUnrealEdMisc::Get().RestartEditor(false);
+#endif
     }
     else
     {
