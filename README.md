@@ -25,7 +25,6 @@ Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.5.4 �
 These are planned or upcoming features for the MDK:
 
 - ⚙️ Mod.io integration (upload mods directly)
-- 💬 Localization/translation support for mod metadata
 
 ---
 
