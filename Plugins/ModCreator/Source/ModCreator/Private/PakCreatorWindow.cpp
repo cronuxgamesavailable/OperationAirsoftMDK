@@ -1,4 +1,4 @@
-// Copyright (C) 2023 Blue Mountains GmbH. All Rights Reserved.
+﻿// Copyright (C) 2023 Blue Mountains GmbH. All Rights Reserved.
 
 #include "PakCreatorWindow.h"
 #include "Misc/Paths.h"
@@ -47,16 +47,25 @@
 // ===== ModInfo refresh helpers (local copy) =====
 namespace
 {
-	// Scans a content-only plugin�s assets and fills Root["Assets"] with Maps, Blueprints, Models, Materials.
+	// Scans a content-only plugin’s assets and fills Root["Assets"] with Maps, Blueprints, Models, Materials.
+	// Scans a content-only plugin’s assets and fills Root["Assets"] with Maps, Blueprints, Models, Materials.
 	static void PopulateAssetsWithMaps(TSharedPtr<FJsonObject>& Root, const FString& PluginDir, const FString& ModName)
 	{
 		TArray<TSharedPtr<FJsonValue>> AssetsArray;
 
-		auto Push = [&AssetsArray](const FString& Type, const FString& Name)
+		// Single helper that can also store AssetClass (for models / materials)
+		auto Push = [&AssetsArray](const FString& Type, const FString& Name, const FString& AssetClass)
 			{
 				TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 				Obj->SetStringField(TEXT("Type"), Type);
 				Obj->SetStringField(TEXT("Name"), Name);
+
+				// Only set AssetClass when it is meaningful (models, materials, etc.)
+				if (!AssetClass.IsEmpty())
+				{
+					Obj->SetStringField(TEXT("AssetClass"), AssetClass);
+				}
+
 				AssetsArray.Add(MakeShared<FJsonValueObject>(Obj));
 			};
 
@@ -87,26 +96,33 @@ namespace
 #endif
 				const FString AssetName = AD.AssetName.ToString();
 
+				// Maps
 				if (ClassName == TEXT("World"))
 				{
-					Push(TEXT("Map"), AssetName);
+					Push(TEXT("Map"), AssetName, TEXT("World"));
 					continue;
 				}
+
+				// Blueprints
 				if (ClassName == TEXT("Blueprint"))
 				{
-					Push(TEXT("Blueprint"), AssetName);
+					Push(TEXT("Blueprint"), AssetName, TEXT("Blueprint"));
 					continue;
 				}
+
+				// Models (Static / Skeletal)  ✅ important for Attachment vs Clothing filter
 				if (ClassName == TEXT("StaticMesh") || ClassName == TEXT("SkeletalMesh"))
 				{
-					Push(TEXT("Model"), AssetName);
+					Push(TEXT("Model"), AssetName, ClassName);
 					continue;
 				}
+
+				// Materials / instances
 				if (ClassName == TEXT("Material") ||
 					ClassName == TEXT("MaterialInstance") ||
 					ClassName == TEXT("MaterialInstanceConstant"))
 				{
-					Push(TEXT("Material"), AssetName);
+					Push(TEXT("Material"), AssetName, ClassName);
 					continue;
 				}
 			}
@@ -114,7 +130,7 @@ namespace
 			bUsedAssetRegistry = true;
 		}
 
-		// Fallback: at least list maps via file scan if AR wasn�t available
+		// Fallback: at least list maps via file scan if AR wasn’t available
 		if (!bUsedAssetRegistry)
 		{
 			const FString ContentDir = PluginDir / TEXT("Content");
@@ -129,7 +145,8 @@ namespace
 					if (Rel.StartsWith(ContentNorm + TEXT("/")))
 					{
 						const FString AssetName = FPaths::GetBaseFilename(Rel.Mid(ContentNorm.Len() + 1));
-						Push(TEXT("Map"), AssetName);
+						// No asset class info in fallback; leave AssetClass empty
+						Push(TEXT("Map"), AssetName, TEXT(""));
 					}
 				}
 			}
@@ -172,13 +189,52 @@ namespace
 
 		// Remove legacy fields and repopulate assets
 		Root->RemoveField(TEXT("MainMap"));
+		Root->RemoveField(TEXT("Assets"));      
 		PopulateAssetsWithMaps(Root, PluginDir, ModName);
 
+		// ✅ NEVER copy BuildRequirements to the final modinfo
+		Root->RemoveField(TEXT("BuildRequirements"));
+
+		// Decide how to handle layout fields based on ModType
+		FString ModTypeValue;
+		Root->TryGetStringField(TEXT("ModType"), ModTypeValue);
+		ModTypeValue = ModTypeValue.TrimStartAndEnd();
+
+		const bool bIsAttachmentOrClothing =
+			ModTypeValue.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase) ||
+			ModTypeValue.Equals(TEXT("Clothing"), ESearchCase::IgnoreCase);
+
+		if (bIsAttachmentOrClothing)
+		{
+			// For Attachment / Clothing mods: strip layout stuff
+			Root->RemoveField(TEXT("LayoutsEnabled"));
+			Root->RemoveField(TEXT("Layouts"));
+		}
+
 		// Ensure optional fields exist
-		if (!Root->HasField(TEXT("LayoutsEnabled"))) Root->SetBoolField(TEXT("LayoutsEnabled"), false);
-		if (!Root->HasField(TEXT("Layouts")))        Root->SetArrayField(TEXT("Layouts"), {});
-		if (!Root->HasField(TEXT("Thumbnail")))      Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
-		if (!Root->HasField(TEXT("BuildRequirements"))) Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
+		// Thumbnail is always okay
+		if (!Root->HasField(TEXT("Thumbnail")))
+		{
+			Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
+		}
+
+		// Only non-attachment/clothing mods get LayoutsEnabled
+		if (!bIsAttachmentOrClothing)
+		{
+			if (!Root->HasField(TEXT("LayoutsEnabled")))
+			{
+				Root->SetBoolField(TEXT("LayoutsEnabled"), false);
+			}
+
+			// Remove Layouts always — we no longer use it
+			Root->RemoveField(TEXT("Layouts"));
+		}
+		else
+		{
+			// For attachment/clothing, remove BOTH to keep JSON clean
+			Root->RemoveField(TEXT("LayoutsEnabled"));
+			Root->RemoveField(TEXT("Layouts"));
+		}
 
 		FString Out;
 		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
@@ -188,8 +244,7 @@ namespace
 		}
 		return FFileHelper::SaveStringToFile(Out, *ModInfoPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
-} // namespace
-// ===== end helpers =====
+}
 
 FPakCreatorWindow::~FPakCreatorWindow()
 {
@@ -747,6 +802,580 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 	return PluginTab;
 }
 
+void FPakCreatorWindow::BuildModelTypeOptions()
+{
+	if (AttachmentTypeOptions.Num() == 0)
+	{
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Mag")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Scope")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_BarrelEnd")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Barrel")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Upper")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Lower")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_ChargingHandle")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Grip")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_OuterBarrel")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_BufferTube")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Stock")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Trigger")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Tank")));
+	}
+
+	if (ClothingTypeOptions.Num() == 0)
+	{
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Hat")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Mask")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Shirt")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Pants")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Gloves")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("KneePads")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("ElbowPads")));
+		ClothingTypeOptions.Add(MakeShared<FString>(TEXT("Vest")));
+	}
+}
+
+bool FPakCreatorWindow::GatherAttachmentClothingModelsForSelection(
+	const TArray<TSharedPtr<FStringEntry>>& SelectedPlugins
+)
+{
+	ModelTypeRows.Empty();
+
+	const FString ProjectPluginsDir = FPaths::ProjectPluginsDir();
+
+	for (const TSharedPtr<FStringEntry>& Item : SelectedPlugins)
+	{
+		const FString& PluginName = Item->PluginPath;
+		const FString PluginDir = FPaths::Combine(ProjectPluginsDir, PluginName);
+
+		AddLogMessage(FString::Printf(TEXT("Checking plugin \"%s\" for Attachment/Clothing models..."), *PluginName));
+
+		// Look for <Plugin>/modinfo.json
+		FString ModInfoPath = FPaths::Combine(PluginDir, TEXT("modinfo.json"));
+		if (!FPaths::FileExists(ModInfoPath))
+		{
+			const FString AltPath = FPaths::Combine(PluginDir, TEXT("Config/modinfo.json"));
+			if (FPaths::FileExists(AltPath))
+			{
+				ModInfoPath = AltPath;
+			}
+		}
+
+		if (!FPaths::FileExists(ModInfoPath))
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> No modinfo.json found for plugin \"%s\""), *PluginName));
+			continue;
+		}
+
+		FString JsonText;
+		if (!FFileHelper::LoadFileToString(JsonText, *ModInfoPath))
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> Failed to read modinfo.json for \"%s\""), *PluginName));
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> Failed to parse modinfo.json for \"%s\""), *PluginName));
+			continue;
+		}
+
+		// Use ModType (Attachment / Clothing)
+		FString ModCategory;
+		if (!Root->TryGetStringField(TEXT("ModType"), ModCategory))
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> ModType not set in modinfo.json for \"%s\""), *PluginName));
+			continue;
+		}
+
+		ModCategory = ModCategory.TrimStartAndEnd();
+		if (!ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase) &&
+			!ModCategory.Equals(TEXT("Clothing"), ESearchCase::IgnoreCase))
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> ModType=\"%s\" (not Attachment/Clothing), skipping \"%s\""),
+				*ModCategory, *PluginName));
+			continue;
+		}
+
+		AddLogMessage(FString::Printf(TEXT("  -> ModType=\"%s\""), *ModCategory));
+
+		// 🔄 ALWAYS refresh Assets[] from the plugin's content so renamed assets are picked up
+		AddLogMessage(TEXT("  -> Refreshing Assets[] from plugin content for type selection..."));
+		Root->RemoveField(TEXT("Assets"));
+		PopulateAssetsWithMaps(Root, PluginDir, PluginName);
+
+		const TArray<TSharedPtr<FJsonValue>>* AssetsArray = nullptr;
+		if (!Root->TryGetArrayField(TEXT("Assets"), AssetsArray) || !AssetsArray || AssetsArray->Num() == 0)
+		{
+			AddLogMessage(FString::Printf(TEXT("  -> No Assets/Models found for \"%s\" after refresh."), *PluginName));
+			continue;
+		}
+
+		int32 ModelsAddedForPlugin = 0;
+
+		for (const TSharedPtr<FJsonValue>& V : *AssetsArray)
+		{
+			const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
+			if (!V.IsValid() || !V->TryGetObject(ObjPtr) || !ObjPtr || !ObjPtr->IsValid())
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>& Obj = *ObjPtr;
+			const FString Type = Obj->GetStringField(TEXT("Type"));
+			if (!Type.Equals(TEXT("Model"), ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			const FString ModelName = Obj->GetStringField(TEXT("Name"));
+			const FString AssetClass = Obj->GetStringField(TEXT("AssetClass")); // NEW
+
+			// Clothing mods -> require SkeletalMesh
+			if (ModCategory.Equals(TEXT("Clothing"), ESearchCase::IgnoreCase))
+			{
+				if (!AssetClass.Equals(TEXT("SkeletalMesh"), ESearchCase::IgnoreCase))
+					continue;
+			}
+
+			if (ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase))
+			{
+				if (!AssetClass.Equals(TEXT("StaticMesh"), ESearchCase::IgnoreCase))
+					continue;
+			}
+
+			TSharedPtr<FModelTypeRow> Row = MakeShared<FModelTypeRow>();
+			Row->PluginName = PluginName;
+			Row->ModelName = ModelName;
+			Row->ModCategory = ModCategory;
+			Row->SelectedType = TEXT("");   // set by the UI
+
+			ModelTypeRows.Add(Row);
+			ModelsAddedForPlugin++;
+		}
+
+		AddLogMessage(FString::Printf(TEXT("  -> Plugin \"%s\": %d model(s) found for type selection."),
+			*PluginName, ModelsAddedForPlugin));
+	}
+
+	if (ModelTypeRows.Num() == 0)
+	{
+		AddLogMessage(TEXT("No Attachment/Clothing models found; skipping type selection dialog."));
+		return false;
+	}
+
+	return true;
+}
+
+TSharedRef<SWidget> FPakCreatorWindow::GenerateModelTypeComboWidget(TSharedPtr<FString> Item)
+{
+	return SNew(STextBlock)
+		.Text_Lambda([Item]()
+			{
+				return Item.IsValid() ? FText::FromString(*Item) : FText::GetEmpty();
+			});
+}
+
+void FPakCreatorWindow::OnModelTypeSelected(
+	TSharedPtr<FString> Selected,
+	ESelectInfo::Type /*SelectInfo*/,
+	TSharedPtr<FModelTypeRow> Row
+)
+{
+	if (Row.IsValid() && Selected.IsValid())
+	{
+		Row->SelectedType = *Selected;
+	}
+}
+
+TSharedRef<ITableRow> FPakCreatorWindow::OnGenerateRowForModelType(
+	TSharedPtr<FModelTypeRow> Item,
+	const TSharedRef<STableViewBase>& OwnerTable
+)
+{
+	if (!Item.IsValid())
+	{
+		return SNew(STableRow<TSharedPtr<FModelTypeRow>>, OwnerTable)
+			[
+				SNew(SBox)
+			];
+	}
+
+	// Select options based on category
+	const bool bIsAttachment = Item->ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase);
+	TArray<TSharedPtr<FString>>& Options = bIsAttachment ? AttachmentTypeOptions : ClothingTypeOptions;
+
+	return SNew(STableRow<TSharedPtr<FModelTypeRow>>, OwnerTable)
+		[
+			SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.FillWidth(0.5f)
+				.VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+						.Text(FText::FromString(Item->ModelName))
+				]
+				+ SHorizontalBox::Slot()
+				.FillWidth(0.5f)
+				.VAlign(VAlign_Center)
+				[
+					SNew(SComboBox<TSharedPtr<FString>>)
+						.OptionsSource(&Options)
+						.OnGenerateWidget(this, &FPakCreatorWindow::GenerateModelTypeComboWidget)
+						.OnSelectionChanged_Lambda([this, Item](TSharedPtr<FString> Selected, ESelectInfo::Type Info)
+							{
+								OnModelTypeSelected(Selected, Info, Item);
+							})
+						[
+							SNew(STextBlock)
+								.Text_Lambda([Item]()
+									{
+										return Item->SelectedType.IsEmpty()
+											? FText::FromString(TEXT("(Select Type)"))
+											: FText::FromString(Item->SelectedType);
+									})
+						]
+				]
+		];
+}
+
+void FPakCreatorWindow::ShowModelTypeDialog()
+{
+	if (ModelTypeDialogWindow.IsValid())
+	{
+		return;
+	}
+
+	BuildModelTypeOptions();
+
+	const TSharedRef<SVerticalBox> DialogContent =
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(8.0f)
+		[
+			SNew(STextBlock)
+				.Text(FText::FromString(TEXT(
+					"Select the Attachment/Clothing type for each model.\n\n"
+					"If you cancel or close this window without applying, the build will be aborted."
+				)))
+				.AutoWrapText(true)
+		]
+	+ SVerticalBox::Slot()
+		.FillHeight(1.f)
+		.Padding(8.0f)
+		[
+			SAssignNew(ModelTypeListView, SListView<TSharedPtr<FModelTypeRow>>)
+				.ListItemsSource(&ModelTypeRows)
+				.SelectionMode(ESelectionMode::Type::None)
+				.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForModelType)
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(8.0f)
+		.HAlign(HAlign_Right)
+		[
+			SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.Padding(4.0f, 0.f)
+				[
+					SNew(SButton)
+						.OnClicked(this, &FPakCreatorWindow::OnModelTypeApplyClicked)
+						[
+							SNew(STextBlock)
+								.Text(FText::FromString(TEXT("Apply")))
+						]
+				]
+			+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.Padding(4.0f, 0.f)
+				[
+					SNew(SButton)
+						.OnClicked(this, &FPakCreatorWindow::OnModelTypeCancelClicked)
+						[
+							SNew(STextBlock)
+								.Text(FText::FromString(TEXT("Cancel")))
+						]
+				]
+		];
+
+	ModelTypeDialogWindow = SNew(SWindow)
+		.Title(FText::FromString(TEXT("Select Attachment / Clothing Types")))
+		.ClientSize(FVector2D(600.f, 400.f))
+		.SupportsMaximize(false)
+		.SupportsMinimize(false)
+		[
+			DialogContent
+		];
+
+	// If user closes via X, treat as cancel
+	ModelTypeDialogWindow->SetOnWindowClosed(FOnWindowClosed::CreateLambda([this](const TSharedRef<SWindow>&)
+		{
+			// Called when user clicks the X or the OS closes the window.
+			if (bWaitingForModelTypes && !bModelTypesApplied)
+			{
+				AddLogMessage(TEXT("Model type selection canceled. Build aborted."));
+			}
+
+			bWaitingForModelTypes = false;
+			ModelTypeDialogWindow.Reset();
+		}));
+
+	FSlateApplication::Get().AddWindow(ModelTypeDialogWindow.ToSharedRef());
+
+	bWaitingForModelTypes = true;
+	bModelTypesApplied = false;
+
+	AddLogMessage(TEXT("Attachment/Clothing mod detected. Waiting for user to finish selecting types..."));
+}
+
+FReply FPakCreatorWindow::OnModelTypeApplyClicked()
+{
+	// 1) Ensure all rows have a type selected
+	for (const TSharedPtr<FModelTypeRow>& Row : ModelTypeRows)
+	{
+		if (Row.IsValid() && Row->SelectedType.IsEmpty())
+		{
+			AddLogMessage(FString::Printf(TEXT("Error: Model \"%s\" has no type selected."), *Row->ModelName));
+			return FReply::Handled();
+		}
+	}
+
+	// 2) Group rows by plugin name
+	TMap<FString, TArray<TSharedPtr<FModelTypeRow>>> PluginToRows;
+	for (const TSharedPtr<FModelTypeRow>& Row : ModelTypeRows)
+	{
+		if (!Row.IsValid())
+		{
+			continue;
+		}
+
+		TArray<TSharedPtr<FModelTypeRow>>& Arr = PluginToRows.FindOrAdd(Row->PluginName);
+		Arr.Add(Row);
+
+		AddLogMessage(FString::Printf(TEXT("Model \"%s\" in plugin \"%s\" set to type \"%s\" (%s)"),
+			*Row->ModelName,
+			*Row->PluginName,
+			*Row->SelectedType,
+			*Row->ModCategory));
+	}
+
+	const FString ProjectPluginsDir = FPaths::ProjectPluginsDir();
+
+	// 3) For each plugin, load modinfo.json and update either Attachments[] OR Clothes[]
+	for (const TPair<FString, TArray<TSharedPtr<FModelTypeRow>>>& Pair : PluginToRows)
+	{
+		const FString& PluginName = Pair.Key;
+		const TArray<TSharedPtr<FModelTypeRow>>& Rows = Pair.Value;
+
+		const FString PluginDir = FPaths::Combine(ProjectPluginsDir, PluginName);
+		FString       ModInfoPath = FPaths::Combine(PluginDir, TEXT("modinfo.json"));
+
+		if (!FPaths::FileExists(ModInfoPath))
+		{
+			const FString AltPath = FPaths::Combine(PluginDir, TEXT("Config/modinfo.json"));
+			if (FPaths::FileExists(AltPath))
+			{
+				ModInfoPath = AltPath;
+			}
+		}
+
+		if (!FPaths::FileExists(ModInfoPath))
+		{
+			AddLogMessage(FString::Printf(TEXT("Warning: modinfo.json not found for \"%s\" when saving types."), *PluginName));
+			continue;
+		}
+
+		FString JsonText;
+		if (!FFileHelper::LoadFileToString(JsonText, *ModInfoPath))
+		{
+			AddLogMessage(FString::Printf(TEXT("Warning: Failed to read modinfo.json for \"%s\" when saving types."), *PluginName));
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			AddLogMessage(FString::Printf(TEXT("Warning: Failed to parse modinfo.json for \"%s\" when saving types."), *PluginName));
+			continue;
+		}
+
+		// Look at root ModType
+		FString RootModType;
+		Root->TryGetStringField(TEXT("ModType"), RootModType);
+		const bool bIsClothingMod = RootModType.Equals(TEXT("Clothing"), ESearchCase::IgnoreCase);
+
+		if (bIsClothingMod)
+		{
+			// ---------------- CLOTHING MOD ----------------
+			// Build Clothes[] from rows whose ModCategory is Clothing
+			TArray<TSharedPtr<FJsonValue>> ClothesArray;
+
+			for (const TSharedPtr<FModelTypeRow>& Row : Rows)
+			{
+				if (!Row.IsValid())
+				{
+					continue;
+				}
+
+				if (!Row->ModCategory.Equals(TEXT("Clothing"), ESearchCase::IgnoreCase))
+				{
+					continue; // ignore non-clothing rows for a clothing mod
+				}
+
+				TSharedPtr<FJsonObject> ClothesObj = MakeShared<FJsonObject>();
+				ClothesObj->SetStringField(TEXT("Name"), Row->ModelName);
+				ClothesObj->SetStringField(TEXT("Type"), Row->SelectedType);
+				// NOTE: no "ModType" here – it stays only at the root
+
+				ClothesArray.Add(MakeShared<FJsonValueObject>(ClothesObj));
+			}
+
+			Root->SetArrayField(TEXT("Clothes"), ClothesArray);
+			Root->RemoveField(TEXT("Attachments")); // remove attachments for clothing mods
+		}
+		else
+		{
+			// ---------------- ATTACHMENT / OTHER MOD ----------------
+			// Build Attachments[] from all rows (or only Attachment category if you prefer)
+			TArray<TSharedPtr<FJsonValue>> AttachmentsArray;
+
+			for (const TSharedPtr<FModelTypeRow>& Row : Rows)
+			{
+				if (!Row.IsValid())
+				{
+					continue;
+				}
+
+				// If you want only Attachment category, uncomment:
+				// if (!Row->ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase))
+				// {
+				//     continue;
+				// }
+
+				TSharedPtr<FJsonObject> AttachObj = MakeShared<FJsonObject>();
+				AttachObj->SetStringField(TEXT("Name"), Row->ModelName);
+				AttachObj->SetStringField(TEXT("Type"), Row->SelectedType);
+				// NOTE: no "ModType" here – it stays only at the root
+
+				AttachmentsArray.Add(MakeShared<FJsonValueObject>(AttachObj));
+			}
+
+			Root->SetArrayField(TEXT("Attachments"), AttachmentsArray);
+			Root->RemoveField(TEXT("Clothes")); // remove clothes for attachment/other mods
+		}
+
+		// Save JSON
+		FString OutJson;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+		if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer) ||
+			!FFileHelper::SaveStringToFile(OutJson, *ModInfoPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			AddLogMessage(FString::Printf(TEXT("Warning: Failed to write updated Attachments/Clothes to modinfo.json for \"%s\""), *PluginName));
+		}
+		else
+		{
+			AddLogMessage(FString::Printf(TEXT("Updated Attachments/Clothes in modinfo.json for \"%s\""), *PluginName));
+		}
+	}
+
+	// 4) Close dialog & proceed to packaging
+	bModelTypesApplied = true;
+	bWaitingForModelTypes = false;
+
+	if (ModelTypeDialogWindow.IsValid())
+	{
+		FSlateApplication::Get().RequestDestroyWindow(ModelTypeDialogWindow.ToSharedRef());
+		ModelTypeDialogWindow.Reset();
+	}
+
+	AddLogMessage(TEXT("Model types applied. Starting packaging..."));
+	StartPackagingAfterModelTypes();
+	return FReply::Handled();
+}
+
+FReply FPakCreatorWindow::OnModelTypeCancelClicked()
+{
+	bModelTypesApplied = false;
+	bWaitingForModelTypes = false;
+
+	if (ModelTypeDialogWindow.IsValid())
+	{
+		FSlateApplication::Get().RequestDestroyWindow(ModelTypeDialogWindow.ToSharedRef());
+		ModelTypeDialogWindow.Reset();
+	}
+
+	AddLogMessage(TEXT("Model type selection canceled. Build aborted."));
+	return FReply::Handled();
+}
+
+void FPakCreatorWindow::StartPackagingAfterModelTypes()
+{
+	// Rebuild the UAT command queue using cached selections, same as your
+	// original CreateButtonPressed logic AFTER the validation.
+
+	PendingUATCommands.Empty();
+
+	const FString ConfigurationName = TEXT("Shipping");
+	FString PlatformName;
+	FString Cookflavor;
+
+	FPakHelperFunctions::GetPlatformNameAndFlavorBySelection(
+		CachedPlatformSelection,
+		PlatformName,
+		Cookflavor
+	);
+
+	AddLogMessage(FString::Printf(TEXT("Platform: %s%s"), *PlatformName, *Cookflavor));
+
+	const FString BaseGameCommand =
+		FPakHelperFunctions::MakeUATCommand(
+			OutputProject,
+			PlatformName,
+			Cookflavor,
+			ConfigurationName,
+			CachedTargetName,
+			FPaths::Combine(GetTemporaryStagingDirectory(), FAutomatedPakParams::ReleaseVersionName))
+		+ FPakHelperFunctions::MakeUATParams_BaseGame(OutputProject, FAutomatedPakParams::ReleaseVersionName);
+
+#if ENGINE_MAJOR_VERSION == 5
+	PendingUATCommands.Enqueue({ FAutomatedPakParams::ReleaseVersionName, BaseGameCommand });
+#else
+	PendingUATCommands.Enqueue(TPair<FString, FString>(FAutomatedPakParams::ReleaseVersionName, BaseGameCommand));
+#endif
+
+	int32 NumPluginBuilds = 0;
+
+	for (const TSharedPtr<FStringEntry>& Item : CachedSelectedPlugins)
+	{
+		const FString DLCCommand =
+			FPakHelperFunctions::MakeUATCommand(
+				OutputProject,
+				PlatformName,
+				Cookflavor,
+				ConfigurationName,
+				CachedTargetName,
+				FPaths::Combine(GetTemporaryStagingDirectory(), Item->PluginPath))
+			+ FPakHelperFunctions::MakeUATParams_DLC(Item->PluginPath, FAutomatedPakParams::ReleaseVersionName);
+
+#if ENGINE_MAJOR_VERSION == 5
+		PendingUATCommands.Enqueue({ Item->PluginPath, DLCCommand });
+#else
+		PendingUATCommands.Enqueue(TPair<FString, FString>(Item->PluginPath, DLCCommand));
+#endif
+
+		NumPluginBuilds++;
+	}
+
+	AddLogMessage(FString::Printf(TEXT("Building %i Mod%s"), NumPluginBuilds, NumPluginBuilds > 1 ? TEXT("s") : TEXT("")));
+	AddLogMessage(TEXT("Notice: Building can take longer on the first run due to shaders compiling. Please be patient."));
+
+	RunBuild();
+}
+
 void FPakCreatorWindow::PopulatePluginList(const FString& ProjectPluginDirectory)
 {
 	AllPlugins.Empty();
@@ -843,11 +1472,29 @@ FReply FPakCreatorWindow::CreateButtonPressed()
 
 	const TSharedPtr<FString> TargetName = TargetComboBox ? TargetComboBox->GetSelectedItem() : nullptr;
 
+	// === NEW: attachment / clothing pre-step ===
+	if (GatherAttachmentClothingModelsForSelection(SelectedItems))
+	{
+		// We have at least one attachment/clothing mod that needs per-model type selection.
+		// Cache values so we can start packaging AFTER the user hits Apply in the dialog.
+		CachedSelectedPlugins = SelectedItems;
+		CachedPlatformSelection = *SelectedPlatform;
+		CachedCookFlavor = TEXT("");               // recalculated inside StartPackagingAfterModelTypes
+		CachedTargetName = TargetName.IsValid() ? *TargetName : TEXT("");
+
+		ShowModelTypeDialog();
+
+		// Packaging will start later from StartPackagingAfterModelTypes()
+		return FReply::Handled();
+	}
+	// === END NEW BLOCK ===
+
+	// === ORIGINAL PACKAGING FLOW (unchanged) ===
 	PendingUATCommands.Empty();
 
-	const FString ConfigurationName = "Shipping";
+	const FString ConfigurationName = TEXT("Shipping");
 	FString PlatformName = FAutomatedPakParams::ValidPlatformNames[0];
-	FString Cookflavor = "";
+	FString Cookflavor = TEXT("");
 
 	FPakHelperFunctions::GetPlatformNameAndFlavorBySelection(*SelectedPlatform, PlatformName, Cookflavor);
 
@@ -859,7 +1506,7 @@ FReply FPakCreatorWindow::CreateButtonPressed()
 			PlatformName,
 			Cookflavor,
 			ConfigurationName,
-			TargetName ? *TargetName : "",
+			TargetName ? *TargetName : TEXT(""),
 			FPaths::Combine(GetTemporaryStagingDirectory(), FAutomatedPakParams::ReleaseVersionName))
 		+ FPakHelperFunctions::MakeUATParams_BaseGame(OutputProject, FAutomatedPakParams::ReleaseVersionName);
 
@@ -879,7 +1526,7 @@ FReply FPakCreatorWindow::CreateButtonPressed()
 				PlatformName,
 				Cookflavor,
 				ConfigurationName,
-				TargetName ? *TargetName : "",
+				TargetName ? *TargetName : TEXT(""),
 				FPaths::Combine(GetTemporaryStagingDirectory(), Item->PluginPath))
 			+ FPakHelperFunctions::MakeUATParams_DLC(Item->PluginPath, FAutomatedPakParams::ReleaseVersionName);
 
@@ -1618,7 +2265,7 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 
 	const FString DestDir = GetLayoutsFolderOnDisk();
 	IFileManager::Get().MakeDirectory(*DestDir, /*Tree=*/true);
-	AddLogMessage(TEXT("Layout: Starting export�"));
+	AddLogMessage(TEXT("Layout: Starting export…"));
 	AddLogMessage(FString::Printf(TEXT("Layout: Output folder = %s"), *DestDir));
 
 	FString Name = LayoutNameInput.IsValid() ? LayoutNameInput->GetText().ToString().TrimStartAndEnd() : TEXT("");
@@ -1649,7 +2296,7 @@ FReply FPakCreatorWindow::HandleCreateLayoutClicked()
 
 	// Build JSON from current level actors with tag "LayoutItem"
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	AddLogMessage(TEXT("Layout: Gathering actors (tag: LayoutItem)�"));
+	AddLogMessage(TEXT("Layout: Gathering actors (tag: LayoutItem)…"));
 	if (!GatherLayoutActorsJSON(Root.ToSharedRef()))
 	{
 		AddLogMessage(TEXT("Layout: Failed to gather actors from current level."));

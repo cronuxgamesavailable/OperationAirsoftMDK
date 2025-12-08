@@ -29,6 +29,14 @@ public:
 	FString PluginPath;
 };
 
+struct FModelTypeRow
+{
+	FString PluginName;
+	FString ModelName;
+	FString ModCategory;
+	FString SelectedType;
+};
+
 /**
  * Main window for Pak/Mod creation with a second tab for Layout authoring.
  */
@@ -42,6 +50,47 @@ public:
 	TSharedRef<SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
 
 private:
+	// === Attachment/Clothing type selection dialog ===
+	TArray<TSharedPtr<FModelTypeRow>> ModelTypeRows;
+	TSharedPtr<SWindow> ModelTypeDialogWindow;
+	TSharedPtr<SListView<TSharedPtr<FModelTypeRow>>> ModelTypeListView;
+
+	// Options for attachment vs clothing types (string-only; adjust to your own categories)
+	TArray<TSharedPtr<FString>> AttachmentTypeOptions;
+	TArray<TSharedPtr<FString>> ClothingTypeOptions;
+
+	// Cached data so we can start packaging AFTER the user hits Apply
+	TArray<TSharedPtr<FStringEntry>> CachedSelectedPlugins;
+	FString CachedPlatformSelection;
+	FString CachedCookFlavor;
+	FString CachedTargetName;
+
+	bool bWaitingForModelTypes = false;
+	bool bModelTypesApplied = false;
+
+	// Helpers
+	bool GatherAttachmentClothingModelsForSelection(
+		const TArray<TSharedPtr<FStringEntry>>& SelectedPlugins
+	);
+
+	void BuildModelTypeOptions();
+	void ShowModelTypeDialog();
+	void CloseModelTypeDialog(bool bUserCancelled);
+
+	FReply OnModelTypeApplyClicked();
+	FReply OnModelTypeCancelClicked();
+
+	TSharedRef<ITableRow> OnGenerateRowForModelType(
+		TSharedPtr<FModelTypeRow> Item,
+		const TSharedRef<STableViewBase>& OwnerTable
+	);
+
+	TSharedRef<SWidget> GenerateModelTypeComboWidget(TSharedPtr<FString> Item);
+	void OnModelTypeSelected(TSharedPtr<FString> Selected, ESelectInfo::Type SelectInfo, TSharedPtr<FModelTypeRow> Row);
+
+	// Kicks off the same packaging flow you currently do in CreateButtonPressed
+	void StartPackagingAfterModelTypes();
+	
 	// ------------------------------------------------------------
 	// Tab management
 	// ------------------------------------------------------------

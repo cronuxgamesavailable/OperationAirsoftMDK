@@ -34,34 +34,10 @@
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
 
-static TArray<TSharedPtr<FString>> GAttachmentTypes;
-static TSharedPtr<FString> GSelectedAttachmentType;
-
-static TArray<TSharedPtr<FString>> GClothingTypes;
-static TSharedPtr<FString> GSelectedClothingType;
-
 // Folders that cannot be copied directly from extracontent and need manual steps.
 // Map: FolderName -> Instructions text shown in the popup.
 static TMap<FString, FString> GCantCopyFolderInstructions;
 static bool bCantCopyFoldersLoaded = false;
-
-
-static bool FillFromEnum(UEnum* Enum)
-{
-    if (!Enum) return false;
-
-    const int32 Count = Enum->NumEnums();
-    for (int32 i = 0; i < Count; ++i)
-    {
-        if (Enum->HasMetaData(TEXT("Hidden"), i)) continue;
-        const FString Name = Enum->GetNameStringByIndex(i);
-        if (!Name.IsEmpty())
-        {
-            GAttachmentTypes.Add(MakeShared<FString>(Name));
-        }
-    }
-    return GAttachmentTypes.Num() > 0;
-}
 
 // --- Mount /Templates/extracontent/Content as /ModTemplates/ --- //
 static bool GTemplatesMounted = false;
@@ -86,162 +62,6 @@ static void EnsureTemplatesMount()
     }
 
     GTemplatesMounted = true;
-}
-
-// Load attachment types from a JSON file at:
-//   <ModCreator Plugin>/Templates/extracontent/Content/attachment_types.json
-// Accepts either:
-//   ["Sight","Grip","Stock","Muzzle","Magazine"]
-// or
-//   { "AttachmentTypes": ["Sight","Grip",...] }
-static bool LoadAttachmentTypesFromJson()
-{
-    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
-    if (!Plugin.IsValid())
-        return false;
-
-    const FString JsonPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content/attachment_types.json");
-    if (!FPaths::FileExists(JsonPath))
-        return false;
-
-    FString JsonStr;
-    if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath))
-        return false;
-
-    TSharedPtr<FJsonValue> RootVal;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
-    if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
-        return false;
-
-    auto Push = [](const FString& Name)
-        {
-            if (!Name.IsEmpty())
-                GAttachmentTypes.Add(MakeShared<FString>(Name));
-        };
-
-    if (RootVal->Type == EJson::Array)
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Arr = RootVal->AsArray();
-        for (const TSharedPtr<FJsonValue>& V : Arr)
-        {
-            Push(V->AsString());
-        }
-    }
-    else if (RootVal->Type == EJson::Object)
-    {
-        const TSharedPtr<FJsonObject> Obj = RootVal->AsObject();
-        const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
-
-        // Case-insensitive keys allowed
-        static const TCHAR* Keys[] = { TEXT("AttachmentTypes"), TEXT("attachmenttypes"), TEXT("types") };
-        for (const TCHAR* K : Keys)
-        {
-            if (Obj->TryGetArrayField(FStringView(K), ArrPtr) && ArrPtr)
-            {
-                for (const TSharedPtr<FJsonValue>& V : *ArrPtr)
-                {
-                    Push(V->AsString());
-                }
-                break;
-            }
-        }
-    }
-
-    return GAttachmentTypes.Num() > 0;
-}
-
-static void BuildAttachmentTypesSource()
-{
-    GAttachmentTypes.Reset();
-    GSelectedAttachmentType.Reset();
-
-    // 1) JSON first (Templates/extracontent/Content/attachment_types.json)
-    if (!LoadAttachmentTypesFromJson())
-    {
-        // 2) Fall back to a project/global enum named EAttachmentType
-        if (UEnum* Enum = FindObject<UEnum>(nullptr, TEXT("EAttachmentType")))
-        {
-            FillFromEnum(Enum);
-        }
-    }
-
-    // 3) Final fallback: sane defaults
-    if (GAttachmentTypes.Num() == 0)
-    {
-        static const TCHAR* Defaults[] = { TEXT("Sight"), TEXT("Grip"), TEXT("Stock"), TEXT("Muzzle"), TEXT("Magazine") };
-        for (const TCHAR* S : Defaults)
-        {
-            GAttachmentTypes.Add(MakeShared<FString>(FString(S)));
-        }
-    }
-
-    if (GAttachmentTypes.Num() > 0)
-    {
-        GSelectedAttachmentType = GAttachmentTypes[0];
-    }
-}
-
-// Load clothing types from a JSON file at:
-//   <ModCreator Plugin>/Templates/extracontent/Content/clothes_types.json
-// Accepts either:
-//   ["Mask","Shoes","Gloves",...]
-// or
-//   { "ClothingTypes": ["Mask","Shoes",...] }
-static bool LoadClothingTypesFromJson()
-{
-    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("ModCreator"));
-    if (!Plugin.IsValid())
-        return false;
-
-    // NOTE: file name as requested: clothes_types.json
-    const FString JsonPath = Plugin->GetBaseDir() / TEXT("Templates/extracontent/Content/clothes_types.json");
-    if (!FPaths::FileExists(JsonPath))
-        return false;
-
-    FString JsonStr;
-    if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath))
-        return false;
-
-    TSharedPtr<FJsonValue> RootVal;
-    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
-    if (!FJsonSerializer::Deserialize(Reader, RootVal) || !RootVal.IsValid())
-        return false;
-
-    auto Push = [](const FString& Name)
-        {
-            if (!Name.IsEmpty())
-                GClothingTypes.Add(MakeShared<FString>(Name));
-        };
-
-    if (RootVal->Type == EJson::Array)
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Arr = RootVal->AsArray();
-        for (const TSharedPtr<FJsonValue>& V : Arr)
-        {
-            Push(V->AsString());
-        }
-    }
-    else if (RootVal->Type == EJson::Object)
-    {
-        const TSharedPtr<FJsonObject> Obj = RootVal->AsObject();
-        const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
-
-        // Case-insensitive keys allowed
-        static const TCHAR* Keys[] = { TEXT("ClothingTypes"), TEXT("clothingtypes"), TEXT("types") };
-        for (const TCHAR* K : Keys)
-        {
-            if (Obj->TryGetArrayField(FStringView(K), ArrPtr) && ArrPtr)
-            {
-                for (const TSharedPtr<FJsonValue>& V : *ArrPtr)
-                {
-                    Push(V->AsString());
-                }
-                break;
-            }
-        }
-    }
-
-    return GClothingTypes.Num() > 0;
 }
 
 // Load special-case folders from:
@@ -347,52 +167,6 @@ static void EnsureCantCopyFoldersLoaded()
     }
 }
 
-static void BuildClothingTypesSource()
-{
-    GClothingTypes.Reset();
-    GSelectedClothingType.Reset();
-
-    // 1) JSON first (Templates/extracontent/Content/clothes_types.json)
-    if (!LoadClothingTypesFromJson())
-    {
-        // 2) Optional: fall back to a project/global enum named EClothingType
-        if (UEnum* Enum = FindObject<UEnum>(nullptr, TEXT("EClothingType")))
-        {
-            // Reuse the same helper if you have it, or inline your own fill logic.
-            // Assuming FillFromEnum can be reused for clothing if it just pushes strings:
-            TArray<TSharedPtr<FString>> Temp;
-            FillFromEnum(Enum); // if FillFromEnum currently fills GAttachmentTypes, you can
-            // instead make a new FillFromEnumIntoArray(Enum, GClothingTypes).
-        }
-    }
-
-    // 3) Final fallback: hard-coded defaults (your clothing list)
-    if (GClothingTypes.Num() == 0)
-    {
-        static const TCHAR* Defaults[] =
-        {
-            TEXT("Mask"),
-            TEXT("Shoes"),
-            TEXT("Gloves"),
-            TEXT("Shirt"),
-            TEXT("Pants"),
-            TEXT("KneePads"),
-            TEXT("ElbowPads"),
-            TEXT("Vest")
-        };
-
-        for (const TCHAR* S : Defaults)
-        {
-            GClothingTypes.Add(MakeShared<FString>(FString(S)));
-        }
-    }
-
-    if (GClothingTypes.Num() > 0)
-    {
-        GSelectedClothingType = GClothingTypes[0];
-    }
-}
-
 const FName FModCreatorCreateWindow::TabName(TEXT("ModCreator_CreateTab"));
 
 namespace
@@ -422,10 +196,6 @@ namespace
         return false;
     }
 
-
-    // Scan extracontent/Content for root .uasset files and first-level folders.
-    //  - Root .uasset files are listed normally (e.g. "BP_Flag.uasset")
-    //  - First-level folders are listed as a single entry using the marker "Folder:<FolderName>"
     static void GatherExtraUassets(const FString& ExtraTemplateDir, TArray<FString>& OutRelPaths)
     {
         OutRelPaths.Reset();
@@ -476,11 +246,6 @@ namespace
             });
     }
 
-    // Copy selected extra content from extracontent -> destination plugin Content/.
-// Entries can be either:
-//   - "SomeAsset.uasset"           (single file under Content/)
-//   - "Folder:<FolderName>"        (entire folder Content/<FolderName>/...)
-// For folder entries, we copy the entire folder tree.
     static bool CopySelectedExtraContent(const FString& ExtraTemplateDir, const FString& DestPluginDir,
         const TSet<FString>& SelectedRelPaths)
     {
@@ -700,71 +465,85 @@ namespace
         Root->SetArrayField(TEXT("Assets"), AssetsArray);
     }
 
-    // --- UPDATED: Remove MainMap and auto-populate Assets with maps found in this plugin.
-    // Pass PluginDir so we can scan its Content folder.
-    bool UpdateModInfoJson(const FString& ModInfoPath, const FString& ModName, const FString& Description, const FString& PluginDir)
+    bool UpdateModInfoJson(
+        const FString& ModInfoPath,
+        const FString& ModName,
+        const FString& Description,
+        const FString& PluginDir)
     {
         FString In;
         TSharedPtr<FJsonObject> Root;
+        bool bLoadedTemplate = false;
 
+        // Try to load existing / copied modinfo.json
         if (FPaths::FileExists(ModInfoPath) && FFileHelper::LoadFileToString(In, *ModInfoPath))
         {
             const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(In);
-            if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+            if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
             {
-                Root = MakeShared<FJsonObject>();
+                bLoadedTemplate = true;
             }
         }
-        else
+
+        // If load/parse failed, start from an empty object
+        if (!Root.IsValid())
         {
             Root = MakeShared<FJsonObject>();
         }
 
-        // Update basic fields
+        // Always set ModName
         Root->SetStringField(TEXT("ModName"), ModName);
+
+        // If user typed a description, overwrite; otherwise keep template one
         if (!Description.IsEmpty())
         {
             Root->SetStringField(TEXT("Description"), Description);
         }
 
-        // Include current project name
+        // Set ProjectName ONLY if template had it OR template failed to load
         const FString ProjectName = FApp::GetProjectName();
-        if (!ProjectName.IsEmpty())
+        if (!ProjectName.IsEmpty() && (Root->HasField(TEXT("ProjectName")) || !bLoadedTemplate))
         {
             Root->SetStringField(TEXT("ProjectName"), ProjectName);
         }
 
-        // ✅ Remove "MainMap" (schema change)
-        Root->RemoveField(TEXT("MainMap"));
-
-        // ✅ Auto-populate Assets with all maps in this plugin
-        PopulateAssetsWithMaps(Root, PluginDir, ModName);
-
-        // (Optional) ensure arrays exist even if empty
-        if (!Root->HasField(TEXT("LayoutsEnabled")))
+        // Make sure ModType exists
+        if (!Root->HasField(TEXT("ModType")))
         {
-            Root->SetBoolField(TEXT("LayoutsEnabled"), false);
+            Root->SetStringField(TEXT("ModType"), TEXT("Clothing"));
         }
-        if (!Root->HasField(TEXT("Layouts")))
-        {
-            Root->SetArrayField(TEXT("Layouts"), {});
-        }
+
+        // Make sure Thumbnail exists
         if (!Root->HasField(TEXT("Thumbnail")))
         {
             Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
         }
-        if (!Root->HasField(TEXT("BuildRequirements")))
-        {
-            Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
-        }
 
+        // Always reset Assets list — we do NOT want to auto-fill any model or material here
+        Root->RemoveField(TEXT("Assets"));
+        Root->SetArrayField(TEXT("Assets"), TArray<TSharedPtr<FJsonValue>>());
+
+        // ------------------------------------------------------------
+        // CLOTHING SUPPORT — DO NOT AUTO FILL.
+        // ALWAYS SET AN EMPTY ARRAY.
+        // ------------------------------------------------------------
+        Root->SetArrayField(TEXT("Clothes"), TArray<TSharedPtr<FJsonValue>>());
+
+        // Never keep BuildRequirements in final mod
+        Root->RemoveField(TEXT("BuildRequirements"));
+
+        // Save JSON
         FString Out;
         const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
         if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer))
         {
             return false;
         }
-        return FFileHelper::SaveStringToFile(Out, *ModInfoPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+
+        return FFileHelper::SaveStringToFile(
+            Out,
+            *ModInfoPath,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
     }
 }
 
@@ -804,8 +583,6 @@ void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
 {
     ScanTemplates();
     EnsureTemplatesMount();
-    BuildAttachmentTypesSource();
-    BuildClothingTypesSource();
 
     ChildSlot
         [
@@ -1123,120 +900,6 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
                 ]
         ]
 
-    // --- Attachment Type (only when "Base Attachment" template is selected) ---
-    + SVerticalBox::Slot()
-        .AutoHeight()
-        .Padding(0, 6)
-        [
-            SNew(SVerticalBox)
-                .Visibility_Lambda([this]()
-                    {
-                        const bool bAttachment =
-                            TemplateItems.IsValidIndex(SelectedIndex) &&
-                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Attachment"), ESearchCase::IgnoreCase);
-                        return bAttachment ? EVisibility::Visible : EVisibility::Collapsed;
-                    })
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                [
-                    SNew(STextBlock).Text(FText::FromString(TEXT("Attachment Type")))
-                ]
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0, 4)
-                [
-                    SNew(SComboBox<TSharedPtr<FString>>)
-                        .OptionsSource(&GAttachmentTypes)
-                        .InitiallySelectedItem(GAttachmentTypes.Num() > 0 ? GAttachmentTypes[0] : TSharedPtr<FString>())
-                        .OnSelectionChanged_Lambda([](TSharedPtr<FString> Sel, ESelectInfo::Type)
-                            {
-                                GSelectedAttachmentType = Sel;
-                            })
-                        .OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
-                            {
-                                return SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? *Item : TEXT("")));
-                            })
-                        [
-                            SNew(STextBlock)
-                                .Text_Lambda([]()
-                                    {
-                                        return FText::FromString(GSelectedAttachmentType.IsValid() ? *GSelectedAttachmentType : TEXT("(select)"));
-                                    })
-                        ]
-                ]
-        ]
-
-    // --- Clothing Type (only when "Base Clothes" template is selected) ---
-    + SVerticalBox::Slot()
-        .AutoHeight()
-        .Padding(0, 6)
-        [
-            SNew(SVerticalBox)
-                .Visibility_Lambda([this]()
-                    {
-                        const bool bClothes =
-                            TemplateItems.IsValidIndex(SelectedIndex) &&
-                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Clothes"), ESearchCase::IgnoreCase);
-                        return bClothes ? EVisibility::Visible : EVisibility::Collapsed;
-                    })
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                [
-                    SNew(STextBlock).Text(FText::FromString(TEXT("Clothing Type")))
-                ]
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0, 4)
-                [
-                    SNew(SComboBox<TSharedPtr<FString>>)
-                        .OptionsSource(&GClothingTypes)
-                        .InitiallySelectedItem(GClothingTypes.Num() > 0 ? GClothingTypes[0] : TSharedPtr<FString>())
-                        .OnSelectionChanged_Lambda([](TSharedPtr<FString> Sel, ESelectInfo::Type)
-                            {
-                                GSelectedClothingType = Sel;
-                            })
-                        .OnGenerateWidget_Lambda([](TSharedPtr<FString> Item)
-                            {
-                                return SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? *Item : TEXT("")));
-                            })
-                        [
-                            SNew(STextBlock)
-                                .Text_Lambda([]()
-                                    {
-                                        return FText::FromString(GSelectedClothingType.IsValid() ? *GSelectedClothingType : TEXT("(select)"));
-                                    })
-                        ]
-                ]
-        ]
-
-    // + Extra Content (show ONLY for Base Map)
-    + SVerticalBox::Slot()
-        .AutoHeight()
-        .Padding(0, 4)
-        [
-            SNew(SVerticalBox)
-                .Visibility_Lambda([this]()
-                    {
-                        const bool bMap =
-                            TemplateItems.IsValidIndex(SelectedIndex) &&
-                            TemplateItems[SelectedIndex].Name.Contains(TEXT("Map"), ESearchCase::IgnoreCase);
-                        const bool bShow = bHasExtraContent && bMap;
-                        return bShow ? EVisibility::Visible : EVisibility::Collapsed;
-                    })
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                [
-                    SNew(SExpandableArea)
-                        .AreaTitle(NSLOCTEXT("ModCreator", "ExtraContentHeader", "+ Extra Content"))
-                        .InitiallyCollapsed(true)
-                        .BodyContent()
-                        [
-                            SNew(SScrollBox)
-                                + SScrollBox::Slot()[ExtraList]
-                        ]
-                ]
-        ]
-
     // Options + Create button
     + SVerticalBox::Slot()
         .AutoHeight()
@@ -1284,34 +947,16 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
     const FString Author = AuthorText.ToString();
     const FString Desc = DescriptionText.ToString();
 
-    // Detect if the selected tile is an Attachment or Clothes template
-    const bool bIsAttachmentTemplate =
-        TemplateItems.IsValidIndex(SelectedIndex) &&
-        TemplateItems[SelectedIndex].Name.Contains(TEXT("Attachment"), ESearchCase::IgnoreCase);
-
-    const bool bIsClothingTemplate =
-        TemplateItems.IsValidIndex(SelectedIndex) &&
-        TemplateItems[SelectedIndex].Name.Contains(TEXT("Clothes"), ESearchCase::IgnoreCase);
-
-    // Final name (append _{Type} when making an Attachment or Clothes mod)
+    // Final plugin name: keep as user entered (sanitized)
     FString FinalModName = RawModName;
-
-    if (bIsAttachmentTemplate && GSelectedAttachmentType.IsValid())
-    {
-        FString Suffix = *GSelectedAttachmentType;   // from Attachment dropdown
-        Suffix.ReplaceInline(TEXT(" "), TEXT(""));   // keep folder/object names clean
-        FinalModName = RawModName + TEXT("_") + Suffix;
-    }
-    else if (bIsClothingTemplate && GSelectedClothingType.IsValid())
-    {
-        FString Suffix = *GSelectedClothingType;     // from Clothing dropdown
-        Suffix.ReplaceInline(TEXT(" "), TEXT(""));
-        FinalModName = RawModName + TEXT("_") + Suffix;
-    }
 
     const FString TemplateDir = TemplateItems[SelectedIndex].Path;
 
-    if (CreatePluginFromTemplate(TemplateDir, FinalModName, Author, Desc))
+    if (CreatePluginFromTemplate(
+        TemplateDir,
+        FinalModName,
+        Author,
+        Desc))
     {
         // Show message, then restart the editor as soon as the dialog is dismissed.
         const FText Msg = FText::Format(
@@ -1323,7 +968,6 @@ FReply SModCreatorCreatePanel::OnCreateClicked()
         FMessageDialog::Open(EAppMsgType::Ok, Msg);
 
 #if WITH_EDITOR
-        // This handles closing and relaunching the editor.
         FUnrealEdMisc::Get().RestartEditor(false);
 #endif
     }
@@ -1360,7 +1004,11 @@ FString SModCreatorCreatePanel::SanitizeName(const FString& InName)
     return Out;
 }
 
-bool SModCreatorCreatePanel::CreatePluginFromTemplate(const FString& TemplateDir, const FString& ModName, const FString& Author, const FString& Description)
+bool SModCreatorCreatePanel::CreatePluginFromTemplate(
+    const FString& TemplateDir,
+    const FString& ModName,
+    const FString& Author,
+    const FString& Description)
 {
     const FString DestPluginDir = FPaths::ProjectPluginsDir() / ModName;
     IFileManager& FM = IFileManager::Get();
@@ -1466,13 +1114,22 @@ bool SModCreatorCreatePanel::CreatePluginFromTemplate(const FString& TemplateDir
 
         if (!ModInfoDst.IsEmpty())
         {
-            if (!UpdateModInfoJson(ModInfoDst, ModName, Description, DestPluginDir))
+            if (!UpdateModInfoJson(
+                ModInfoDst,
+                ModName,
+                Description,
+                DestPluginDir))
             {
-                UE_LOG(LogTemp, Warning, TEXT("[ModCreator] Failed to update %s with ModName/Description/Assets"), *ModInfoDst);
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[ModCreator] Failed to update %s with ModName/Description/Assets"),
+                    *ModInfoDst);
             }
             else
             {
-                UE_LOG(LogTemp, Log, TEXT("[ModCreator] Updated %s (ModName=%s, Assets=Maps)"), *ModInfoDst, *ModName);
+                UE_LOG(LogTemp, Log,
+                    TEXT("[ModCreator] Updated %s (ModName=%s, Assets scanned)"),
+                    *ModInfoDst,
+                    *ModName);
             }
         }
     }
