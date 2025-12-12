@@ -35,6 +35,10 @@ struct FModelTypeRow
 	FString ModelName;
 	FString ModCategory;
 	FString SelectedType;
+
+	// Extra options for special attachment types
+	bool bExcludeStock = false;  // used when SelectedType == "Rifle_BufferTube"
+	bool bIncludeTank = false;  // used when SelectedType == "Rifle_Grip"
 };
 
 /**

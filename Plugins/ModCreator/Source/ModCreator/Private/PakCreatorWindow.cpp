@@ -1008,33 +1008,156 @@ TSharedRef<ITableRow> FPakCreatorWindow::OnGenerateRowForModelType(
 
 	return SNew(STableRow<TSharedPtr<FModelTypeRow>>, OwnerTable)
 		[
-			SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot()
-				.FillWidth(0.5f)
-				.VAlign(VAlign_Center)
+			SNew(SVerticalBox)
+
+				// --- First row: model name + type combo ---
+				+ SVerticalBox::Slot()
+				.AutoHeight()
 				[
-					SNew(STextBlock)
-						.Text(FText::FromString(Item->ModelName))
-				]
-				+ SHorizontalBox::Slot()
-				.FillWidth(0.5f)
-				.VAlign(VAlign_Center)
-				[
-					SNew(SComboBox<TSharedPtr<FString>>)
-						.OptionsSource(&Options)
-						.OnGenerateWidget(this, &FPakCreatorWindow::GenerateModelTypeComboWidget)
-						.OnSelectionChanged_Lambda([this, Item](TSharedPtr<FString> Selected, ESelectInfo::Type Info)
-							{
-								OnModelTypeSelected(Selected, Info, Item);
-							})
+					SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot()
+						.FillWidth(0.5f)
+						.VAlign(VAlign_Center)
 						[
 							SNew(STextBlock)
-								.Text_Lambda([Item]()
+								.Text(FText::FromString(Item->ModelName))
+						]
+						+ SHorizontalBox::Slot()
+						.FillWidth(0.5f)
+						.VAlign(VAlign_Center)
+						[
+							SNew(SComboBox<TSharedPtr<FString>>)
+								.OptionsSource(&Options)
+								.OnGenerateWidget(this, &FPakCreatorWindow::GenerateModelTypeComboWidget)
+								.OnSelectionChanged_Lambda([this, Item](TSharedPtr<FString> Selected, ESelectInfo::Type Info)
 									{
-										return Item->SelectedType.IsEmpty()
-											? FText::FromString(TEXT("(Select Type)"))
-											: FText::FromString(Item->SelectedType);
+										OnModelTypeSelected(Selected, Info, Item);
 									})
+								[
+									SNew(STextBlock)
+										.Text_Lambda([Item]()
+											{
+												return Item->SelectedType.IsEmpty()
+													? FText::FromString(TEXT("(Select Type)"))
+													: FText::FromString(Item->SelectedType);
+											})
+								]
+						]
+				]
+
+			// --- Second row: L-connector + special checkboxes ---
+			+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(24.0f, 4.0f, 0.0f, 0.0f) // small indent under combo
+				[
+					SNew(SBox)
+						.Visibility_Lambda([Item]()
+							{
+								const bool bIsBufferTube = Item->SelectedType.Equals(TEXT("Rifle_BufferTube"), ESearchCase::IgnoreCase);
+								const bool bIsGrip = Item->SelectedType.Equals(TEXT("Rifle_Grip"), ESearchCase::IgnoreCase);
+								return (bIsBufferTube || bIsGrip) ? EVisibility::Visible : EVisibility::Collapsed;
+							})
+						[
+							SNew(SHorizontalBox)
+
+								// L-shaped connector on the left
+								+ SHorizontalBox::Slot()
+								.AutoWidth()
+								[
+									SNew(SBox)
+										.WidthOverride(12.f)
+										.HeightOverride(12.f)
+										[
+											SNew(SOverlay)
+
+												// vertical part of L
+												+ SOverlay::Slot()
+												.HAlign(HAlign_Left)
+												.VAlign(VAlign_Fill)
+												[
+													SNew(SBox)
+														.WidthOverride(2.f)
+														[
+															SNew(SBorder)
+																.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+																.BorderBackgroundColor(FLinearColor::Gray)
+														]
+												]
+
+											// horizontal part of L
+											+ SOverlay::Slot()
+												.HAlign(HAlign_Fill)
+												.VAlign(VAlign_Bottom)
+												[
+													SNew(SBox)
+														.HeightOverride(2.f)
+														[
+															SNew(SBorder)
+																.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+																.BorderBackgroundColor(FLinearColor::Gray)
+														]
+												]
+										]
+								]
+
+							// Checkboxes area to the right of the L
+							+ SHorizontalBox::Slot()
+								.AutoWidth()
+								.Padding(4.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SHorizontalBox)
+
+										// Exclude Stock (only when type == Rifle_BufferTube)
+										+ SHorizontalBox::Slot()
+										.AutoWidth()
+										[
+											SNew(SCheckBox)
+												.Visibility_Lambda([Item]()
+													{
+														return Item->SelectedType.Equals(TEXT("Rifle_BufferTube"), ESearchCase::IgnoreCase)
+															? EVisibility::Visible
+															: EVisibility::Collapsed;
+													})
+												.IsChecked_Lambda([Item]()
+													{
+														return Item->bExcludeStock ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+													})
+												.OnCheckStateChanged_Lambda([Item](ECheckBoxState NewState)
+													{
+														Item->bExcludeStock = (NewState == ECheckBoxState::Checked);
+													})
+												[
+													SNew(STextBlock)
+														.Text(FText::FromString(TEXT("Exclude Stock")))
+												]
+										]
+
+									// Include Tank (only when type == Rifle_Grip)
+									+ SHorizontalBox::Slot()
+										.AutoWidth()
+										.Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SCheckBox)
+												.Visibility_Lambda([Item]()
+													{
+														return Item->SelectedType.Equals(TEXT("Rifle_Grip"), ESearchCase::IgnoreCase)
+															? EVisibility::Visible
+															: EVisibility::Collapsed;
+													})
+												.IsChecked_Lambda([Item]()
+													{
+														return Item->bIncludeTank ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+													})
+												.OnCheckStateChanged_Lambda([Item](ECheckBoxState NewState)
+													{
+														Item->bIncludeTank = (NewState == ECheckBoxState::Checked);
+													})
+												[
+													SNew(STextBlock)
+														.Text(FText::FromString(TEXT("Include Tank")))
+												]
+										]
+								]
 						]
 				]
 		];
@@ -1240,8 +1363,38 @@ FReply FPakCreatorWindow::OnModelTypeApplyClicked()
 		else
 		{
 			// ---------------- ATTACHMENT / OTHER MOD ----------------
-			// Build Attachments[] from all rows (or only Attachment category if you prefer)
+			// Build Attachments[] from rows (and handle Include/Exclude rules)
 			TArray<TSharedPtr<FJsonValue>> AttachmentsArray;
+
+			// Start with any existing Include/Exclude arrays already in the template
+			TSet<FString> IncludeSet;
+			TSet<FString> ExcludeSet;
+
+			const TArray<TSharedPtr<FJsonValue>>* ExistingInclude = nullptr;
+			if (Root->TryGetArrayField(TEXT("IncludeAttachments"), ExistingInclude) && ExistingInclude)
+			{
+				for (const TSharedPtr<FJsonValue>& V : *ExistingInclude)
+				{
+					const FString Val = V->AsString();
+					if (!Val.IsEmpty())
+					{
+						IncludeSet.Add(Val);
+					}
+				}
+			}
+
+			const TArray<TSharedPtr<FJsonValue>>* ExistingExclude = nullptr;
+			if (Root->TryGetArrayField(TEXT("ExcludeAttachments"), ExistingExclude) && ExistingExclude)
+			{
+				for (const TSharedPtr<FJsonValue>& V : *ExistingExclude)
+				{
+					const FString Val = V->AsString();
+					if (!Val.IsEmpty())
+					{
+						ExcludeSet.Add(Val);
+					}
+				}
+			}
 
 			for (const TSharedPtr<FModelTypeRow>& Row : Rows)
 			{
@@ -1250,22 +1403,63 @@ FReply FPakCreatorWindow::OnModelTypeApplyClicked()
 					continue;
 				}
 
-				// If you want only Attachment category, uncomment:
-				// if (!Row->ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase))
-				// {
-				//     continue;
-				// }
-
 				TSharedPtr<FJsonObject> AttachObj = MakeShared<FJsonObject>();
 				AttachObj->SetStringField(TEXT("Name"), Row->ModelName);
 				AttachObj->SetStringField(TEXT("Type"), Row->SelectedType);
 				// NOTE: no "ModType" here – it stays only at the root
 
 				AttachmentsArray.Add(MakeShared<FJsonValueObject>(AttachObj));
+
+				// Special rules for certain attachment types:
+				//  - Rifle_BufferTube + "Exclude Stock" => ExcludeAttachments += "Rifle_Stock"
+				//  - Rifle_Grip       + "Include Tank"  => IncludeAttachments += "Rifle_Tank"
+				if (Row->ModCategory.Equals(TEXT("Attachment"), ESearchCase::IgnoreCase))
+				{
+					if (Row->SelectedType.Equals(TEXT("Rifle_BufferTube"), ESearchCase::IgnoreCase)
+						&& Row->bExcludeStock)
+					{
+						ExcludeSet.Add(TEXT("Rifle_Stock"));
+					}
+
+					if (Row->SelectedType.Equals(TEXT("Rifle_Grip"), ESearchCase::IgnoreCase)
+						&& Row->bIncludeTank)
+					{
+						IncludeSet.Add(TEXT("Rifle_Tank"));
+					}
+				}
 			}
 
 			Root->SetArrayField(TEXT("Attachments"), AttachmentsArray);
 			Root->RemoveField(TEXT("Clothes")); // remove clothes for attachment/other mods
+
+			// Write IncludeAttachments / ExcludeAttachments back (only if they have entries)
+			if (IncludeSet.Num() > 0)
+			{
+				TArray<TSharedPtr<FJsonValue>> NewIncludeArray;
+				for (const FString& S : IncludeSet)
+				{
+					NewIncludeArray.Add(MakeShared<FJsonValueString>(S));
+				}
+				Root->SetArrayField(TEXT("IncludeAttachments"), NewIncludeArray);
+			}
+			else
+			{
+				Root->RemoveField(TEXT("IncludeAttachments"));
+			}
+
+			if (ExcludeSet.Num() > 0)
+			{
+				TArray<TSharedPtr<FJsonValue>> NewExcludeArray;
+				for (const FString& S : ExcludeSet)
+				{
+					NewExcludeArray.Add(MakeShared<FJsonValueString>(S));
+				}
+				Root->SetArrayField(TEXT("ExcludeAttachments"), NewExcludeArray);
+			}
+			else
+			{
+				Root->RemoveField(TEXT("ExcludeAttachments"));
+			}
 		}
 
 		// Save JSON
@@ -1670,8 +1864,7 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 			AddLogMessage(FString::Printf(TEXT("Warning: Failed to delete temporary build directory %s"), *GetTemporaryStagingDirectory()));
 		}
 
-		// === Copy modinfo.json into subfolder named after mod ===
-		// === REPLACE YOUR EXISTING "copy modinfo.json into subfolder" BLOCK WITH THIS ===
+		// === Copy modinfo.json (and thumbnail) into subfolder named after mod ===
 		{
 			const FString PluginFolder = FPaths::Combine(FPaths::ProjectPluginsDir(), CurrentTaskName);
 
@@ -1695,7 +1888,7 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 					Root->SetStringField(TEXT("ProjectName"), FApp::GetProjectName());
 					Root->SetBoolField(TEXT("LayoutsEnabled"), false);
 					Root->SetArrayField(TEXT("Layouts"), {});
-					Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));
+					Root->SetStringField(TEXT("Thumbnail"), TEXT("Thumbnail.png"));   // default thumbnail name
 					Root->SetStringField(TEXT("BuildRequirements"), TEXT(""));
 
 					// Seed Assets from the plugin's Content folder
@@ -1719,10 +1912,11 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 				AddLogMessage(FString::Printf(TEXT("Warning: Failed to update modinfo.json for \"%s\""), *CurrentTaskName));
 			}
 
-			// Copy the refreshed file to the output subfolder
+			// Ensure output subfolder exists: <OutputPath>/<ModName>/
 			const FString SubFolderPath = FPaths::Combine(OutputPath, CurrentTaskName);
 			IFileManager::Get().MakeDirectory(*SubFolderPath, /*Tree=*/true);
 
+			// --- Copy the refreshed modinfo.json into the final mod folder ---
 			const FString Destination = FPaths::Combine(SubFolderPath, TEXT("modinfo.json"));
 			if (PlatformFile.CopyFile(*Destination, *ModInfoPath))
 			{
@@ -1732,11 +1926,65 @@ void FPakCreatorWindow::ProcessComplete(int32 ErrorCode)
 			{
 				AddLogMessage(TEXT("Error: Failed to copy refreshed modinfo.json to output folder"));
 			}
+
+			// --- NEW: Copy the thumbnail into the final mod folder next to modinfo.json ---
+
+			// 1) Get thumbnail name from modinfo.json (fallback to "Thumbnail.png")
+			FString ThumbnailName = TEXT("Thumbnail.png");
+			{
+				FString JsonText;
+				if (FFileHelper::LoadFileToString(JsonText, *ModInfoPath))
+				{
+					TSharedPtr<FJsonObject> Root;
+					const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+					if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+					{
+						FString FromJson;
+						if (Root->TryGetStringField(TEXT("Thumbnail"), FromJson))
+						{
+							FromJson = FromJson.TrimStartAndEnd();
+							if (!FromJson.IsEmpty())
+							{
+								ThumbnailName = FromJson;
+							}
+						}
+					}
+				}
+			}
+
+			// 2) Look for the thumbnail file inside the plugin (root first, then Config/)
+			FString SourceThumbnail = FPaths::Combine(PluginFolder, ThumbnailName);
+			if (!FPaths::FileExists(SourceThumbnail))
+			{
+				const FString AltThumb = FPaths::Combine(PluginFolder, TEXT("Config"), ThumbnailName);
+				if (FPaths::FileExists(AltThumb))
+				{
+					SourceThumbnail = AltThumb;
+				}
+			}
+
+			// 3) Copy it into the mod output folder if found
+			if (FPaths::FileExists(SourceThumbnail))
+			{
+				const FString DestThumbnail = FPaths::Combine(SubFolderPath, ThumbnailName);
+				if (PlatformFile.CopyFile(*DestThumbnail, *SourceThumbnail))
+				{
+					AddLogMessage(FString::Printf(TEXT("Copied thumbnail \"%s\" to mod output folder"), *ThumbnailName));
+				}
+				else
+				{
+					AddLogMessage(FString::Printf(TEXT("Error: Failed to copy thumbnail \"%s\" to mod output folder"), *ThumbnailName));
+				}
+			}
+			else
+			{
+				AddLogMessage(FString::Printf(TEXT("Warning: Thumbnail file \"%s\" not found for plugin \"%s\""),
+					*ThumbnailName, *CurrentTaskName));
+			}
 		}
 
 		AddLogMessage(TEXT("All builds finished"));
 	}
-
 }
 
 void FPakCreatorWindow::AddLogMessage(const FString& Message)
