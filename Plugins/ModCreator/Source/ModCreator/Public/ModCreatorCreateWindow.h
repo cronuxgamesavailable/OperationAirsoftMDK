@@ -30,6 +30,7 @@ private:
 
     void ScanTemplates(); // scans Plugins/ModCreator/Templates/*
     int32 SelectedIndex = INDEX_NONE;
+    TSharedRef<SWidget> BuildExtraContent();
 
     // UI state
     FText ModNameText;

@@ -588,7 +588,9 @@ void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
         [
             SNew(SVerticalBox)
 
-                + SVerticalBox::Slot().AutoHeight().Padding(10, 8)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(10, 8)
                 [
                     SNew(STextBlock)
                         .Text(NSLOCTEXT("ModCreator", "IntroText",
@@ -597,7 +599,9 @@ void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
                         .WrapTextAt(900.f)
                 ]
 
-            + SVerticalBox::Slot().FillHeight(1.f).Padding(10, 6)
+            + SVerticalBox::Slot()
+                .FillHeight(1.f)
+                .Padding(10, 6)
                 [
                     SAssignNew(Scroll, SScrollBox)
                         + SScrollBox::Slot()
@@ -606,9 +610,167 @@ void SModCreatorCreatePanel::Construct(const FArguments& InArgs)
                         ]
                 ]
 
-            + SVerticalBox::Slot().AutoHeight().Padding(10, 6)
+            // ✅ Extra Content (only shows for Base Map when BuildExtraContent() decides to)
+            + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(10, 6)
+                [
+                    BuildExtraContent()
+                ]
+
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(10, 6)
                 [
                     BuildFooter()
+                ]
+        ];
+}
+
+TSharedRef<SWidget> SModCreatorCreatePanel::BuildExtraContent()
+{
+    // Build the list widget of checkboxes once
+    TSharedRef<SVerticalBox> ExtraList = SNew(SVerticalBox);
+
+    if (ExtraAssetRelPaths.Num() > 0)
+    {
+        // Make sure we’ve read CantCopyDirectly.json
+        EnsureCantCopyFoldersLoaded();
+
+        for (const FString& Rel : ExtraAssetRelPaths)
+        {
+            const bool bIsFolder = Rel.StartsWith(TEXT("Folder:"));
+            FString NiceName;
+            FString FolderName;
+
+            if (bIsFolder)
+            {
+                FolderName = Rel.Mid(7); // strip "Folder:"
+                NiceName = FolderName;
+            }
+            else
+            {
+                NiceName = FPaths::GetBaseFilename(Rel); // no .uasset
+            }
+
+            const bool bNeedsSpecialSteps = bIsFolder && GCantCopyFolderInstructions.Contains(FolderName);
+
+            ExtraList->AddSlot()
+                .AutoHeight()
+                .Padding(0, 2)
+                [
+                    SNew(SCheckBox)
+                        .IsChecked_Lambda([this, Rel]()
+                            {
+                                return ExtraSelectedRelPaths.Contains(Rel)
+                                    ? ECheckBoxState::Checked
+                                    : ECheckBoxState::Unchecked;
+                            })
+                        .OnCheckStateChanged_Lambda([this, Rel, bNeedsSpecialSteps, FolderName](ECheckBoxState State)
+                            {
+                                if (State == ECheckBoxState::Checked)
+                                {
+                                    if (bNeedsSpecialSteps)
+                                    {
+                                        const FString* InstructionsPtr = GCantCopyFolderInstructions.Find(FolderName);
+                                        const FString Instructions = InstructionsPtr ? *InstructionsPtr : FString();
+
+                                        FMessageDialog::Open(
+                                            EAppMsgType::Ok,
+                                            Instructions.IsEmpty()
+                                            ? NSLOCTEXT(
+                                                "ModCreator",
+                                                "CantCopyDirectlyInfoDefault",
+                                                "This content pack cannot be copied automatically.\n\n"
+                                                "Please follow the manual install steps for this folder "
+                                                "(see the documentation or readme for details).")
+                                            : FText::FromString(Instructions)
+                                        );
+
+                                        // Do NOT add to ExtraSelectedRelPaths – binding will snap checkbox back.
+                                        return;
+                                    }
+
+                                    ExtraSelectedRelPaths.Add(Rel);
+                                }
+                                else
+                                {
+                                    ExtraSelectedRelPaths.Remove(Rel);
+                                }
+                            })
+                        [
+                            SNew(SHorizontalBox)
+
+                                // Left icon: folder vs asset
+                                + SHorizontalBox::Slot()
+                                .AutoWidth()
+                                .VAlign(VAlign_Center)
+                                .Padding(0, 0, 6, 0)
+                                [
+                                    bIsFolder
+                                        ? StaticCastSharedRef<SWidget>(SNew(SImage)
+                                            .Image(FAppStyle::Get().GetBrush("ContentBrowser.AssetTreeFolderClosed")))
+                                        : StaticCastSharedRef<SWidget>(SNew(SImage)
+                                            .Image(FAppStyle::Get().GetBrush("ContentBrowser.ColumnViewAssetIcon")))
+                                ]
+
+                            // Label text
+                            + SHorizontalBox::Slot()
+                                .FillWidth(1.f)
+                                .VAlign(VAlign_Center)
+                                [
+                                    SNew(STextBlock)
+                                        .Text(FText::FromString(NiceName))
+                                        .ColorAndOpacity(FSlateColor(FLinearColor::White))
+                                        .Font(FAppStyle::Get().GetFontStyle("NormalText"))
+                                ]
+
+                                // Right-side warning icon for special folders
+                                + SHorizontalBox::Slot()
+                                .AutoWidth()
+                                .VAlign(VAlign_Center)
+                                .HAlign(HAlign_Right)
+                                .Padding(6, 0, 0, 0)
+                                [
+                                    bNeedsSpecialSteps
+                                        ? StaticCastSharedRef<SWidget>(SNew(SImage)
+                                            .Image(FAppStyle::Get().GetBrush("Icons.Warning"))
+                                            .ToolTipText(NSLOCTEXT(
+                                                "ModCreator",
+                                                "CantCopyDirectlyTooltip",
+                                                "This folder requires manual install steps.\n"
+                                                "Click the checkbox to see instructions.")))
+                                        : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+                                ]
+                        ]
+                ];
+        }
+    }
+
+    // Only show for Base Map
+    return SNew(SVerticalBox)
+        .Visibility_Lambda([this]()
+            {
+                const bool bIsBaseMap =
+                    TemplateItems.IsValidIndex(SelectedIndex) &&
+                    TemplateItems[SelectedIndex].Name.Equals(TEXT("Base Map"), ESearchCase::IgnoreCase);
+
+                const bool bShow = bHasExtraContent && bIsBaseMap && ExtraAssetRelPaths.Num() > 0;
+                return bShow ? EVisibility::Visible : EVisibility::Collapsed;
+            })
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SExpandableArea)
+                .AreaTitle(NSLOCTEXT("ModCreator", "ExtraContentHeader", "+ Extra Content"))
+                .InitiallyCollapsed(true)
+                .BodyContent()
+                [
+                    SNew(SScrollBox)
+                        + SScrollBox::Slot()
+                        [
+                            ExtraList
+                        ]
                 ]
         ];
 }
