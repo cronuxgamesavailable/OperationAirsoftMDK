@@ -52,6 +52,28 @@ public:
 
 	/** Builds the window/tab UI */
 	TSharedRef<SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+	
+	// --- Thumbnail Override (UI + file replace in plugin) ---
+	FString SelectedThumbnailPath;
+	TSharedPtr<SEditableTextBox> ThumbnailPathInput;
+
+	// Preview
+	TSharedPtr<FSlateBrush> ThumbnailPreviewBrush;
+	void RefreshThumbnailPreviewBrush();
+	const FSlateBrush* GetThumbnailPreviewBrush() const;
+
+	FReply HandleThumbnailBrowseClicked();
+	FReply HandleClearThumbnailClicked();
+	FText  GetCurrentThumbnailPath() const;
+
+	bool   ValidateThumbnailImage(const FString& FilePath, FString& OutError) const;
+	void   ApplyThumbnailToSelectedPlugins(const FString& SourceFile);
+
+	// Optional: keep the preview updated when user selects different plugin(s)
+	void OnPluginSelectionChanged(TSharedPtr<FStringEntry> Item, ESelectInfo::Type SelectInfo);
+
+	UTexture2D* ThumbnailPreviewTexture = nullptr;
+	EVisibility GetThumbnailVisibility() const;
 
 private:
 	// === Attachment/Clothing type selection dialog ===

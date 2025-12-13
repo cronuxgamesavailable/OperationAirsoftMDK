@@ -25,7 +25,8 @@ public class ModCreator : ModuleRules
             "InputCore", 
             "Settings",
             "HTTP",
-            "UnrealEd"
+            "UnrealEd",
+            "ImageWrapper"
         });
     }
 }

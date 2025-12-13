@@ -40,6 +40,13 @@
 #include "Materials/MaterialInterface.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Brushes/SlateImageBrush.h"
+#include "Styling/SlateBrush.h"
+#include "Widgets/Layout/SScaleBox.h"
+#include "Widgets/Layout/SBox.h"
+
 
 
 #define LOCTEXT_NAMESPACE "FPakCreatorWindow"
@@ -329,6 +336,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 		.TabRole(ETabRole::NomadTab)
 		[
 			SNew(SOverlay)
+
 				+ SOverlay::Slot()
 				.Padding(10.0f)
 				.VAlign(VAlign_Fill)
@@ -343,6 +351,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 						.Padding(0, 0, 0, 8)
 						[
 							SNew(SHorizontalBox)
+
 								+ SHorizontalBox::Slot()
 								.AutoWidth()
 								.Padding(0, 0, 12, 0)
@@ -360,6 +369,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 											SNew(STextBlock).Text(FText::FromString(TEXT("Package Mod")))
 										]
 								]
+
 							+ SHorizontalBox::Slot()
 								.AutoWidth()
 								[
@@ -385,8 +395,10 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 						[
 							SAssignNew(TabSwitcher, SWidgetSwitcher)
 
-								// === TAB 0: MAIN (fills window) ===
-								+ SWidgetSwitcher::Slot()
+								// =========================================================
+								// === TAB 0: PACKAGE MOD
+								// =========================================================
+								+SWidgetSwitcher::Slot()
 								[
 									SNew(SHorizontalBox)
 
@@ -397,12 +409,14 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 										.HAlign(HAlign_Fill)
 										[
 											SNew(SVerticalBox)
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
 													SNew(STextBlock)
 														.Text(SelectPluginText)
 												]
+
 												+ SVerticalBox::Slot()
 												.VAlign(VAlign_Fill)
 												.HAlign(HAlign_Fill)
@@ -410,6 +424,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												.AutoHeight()
 												[
 													SNew(SHorizontalBox)
+
 														+ SHorizontalBox::Slot()
 														.VAlign(VAlign_Fill)
 														.HAlign(HAlign_Fill)
@@ -421,6 +436,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.OnTextCommitted(this, &FPakCreatorWindow::OnFilterTextCommitted)
 														]
 												]
+
 											+ SVerticalBox::Slot()
 												.Padding(10.0f)
 												.FillHeight(1.f)
@@ -429,6 +445,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 														.ListItemsSource(&Plugins)
 														.SelectionMode(ESelectionMode::Type::Multi)
 														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForList)
+														.OnSelectionChanged(this, &FPakCreatorWindow::OnPluginSelectionChanged)
 														.ScrollbarVisibility(EVisibility::Hidden)
 												]
 										]
@@ -440,12 +457,14 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 										.HAlign(HAlign_Fill)
 										[
 											SNew(SVerticalBox)
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
 													SNew(STextBlock)
 														.Text(ProjectPathText)
 												]
+
 												+ SVerticalBox::Slot()
 												.VAlign(VAlign_Fill)
 												.HAlign(HAlign_Fill)
@@ -453,6 +472,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												.AutoHeight()
 												[
 													SNew(SHorizontalBox)
+
 														+ SHorizontalBox::Slot()
 														.VAlign(VAlign_Fill)
 														.HAlign(HAlign_Fill)
@@ -462,6 +482,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.OnTextCommitted(this, &FPakCreatorWindow::OnProjectFileCommitted)
 																.IsReadOnly(false)
 														]
+
 														+ SHorizontalBox::Slot()
 														.HAlign(HAlign_Right)
 														.AutoWidth()
@@ -478,12 +499,14 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																]
 														]
 												]
+
 											+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
 													SNew(STextBlock)
 														.Text(PlatformText)
 												]
+
 												+ SVerticalBox::Slot()
 												.VAlign(VAlign_Fill)
 												.HAlign(HAlign_Fill)
@@ -506,20 +529,23 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 #endif
 														]
 												]
+
 											+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
-													TargetSource.Num() > 1 ? SNew(STextBlock)
-														.Text(TargetText)
+													TargetSource.Num() > 1
+														? SNew(STextBlock).Text(TargetText)
 														: SNullWidget::NullWidget
 												]
+
 												+ SVerticalBox::Slot()
 												.VAlign(VAlign_Fill)
 												.HAlign(HAlign_Fill)
 												.Padding(TargetSource.Num() > 1 ? 10.0f : 0.0f)
 												.AutoHeight()
 												[
-													TargetSource.Num() > 1 ? SAssignNew(TargetComboBox, SComboBox<TSharedPtr<FString>>)
+													TargetSource.Num() > 1
+														? SAssignNew(TargetComboBox, SComboBox<TSharedPtr<FString>>)
 														.OptionsSource(&TargetSource)
 														.InitiallySelectedItem(TargetSource[0])
 														.ToolTipText(TargetToolTip)
@@ -536,12 +562,14 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 														]
 														: SNullWidget::NullWidget
 												]
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
 													SNew(STextBlock)
 														.Text(OutputPathText)
 												]
+
 												+ SVerticalBox::Slot()
 												.VAlign(VAlign_Fill)
 												.HAlign(HAlign_Fill)
@@ -549,6 +577,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												.AutoHeight()
 												[
 													SNew(SHorizontalBox)
+
 														+ SHorizontalBox::Slot()
 														.VAlign(VAlign_Fill)
 														.HAlign(HAlign_Fill)
@@ -557,6 +586,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.Text(this, &FPakCreatorWindow::GetCurrentPath)
 																.OnTextCommitted(this, &FPakCreatorWindow::OnPathTextCommitted)
 														]
+
 														+ SHorizontalBox::Slot()
 														.HAlign(HAlign_Right)
 														.AutoWidth()
@@ -573,6 +603,57 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																]
 														]
 												]
+
+											// === Thumbnail (click to change) ===
+											+ SVerticalBox::Slot()
+												.AutoHeight()
+												.Padding(0, 8, 0, 0)
+												[
+													SNew(SBox)
+														.Visibility(this, &FPakCreatorWindow::GetThumbnailVisibility)
+														[
+															SNew(SVerticalBox)
+
+																+ SVerticalBox::Slot()
+																.AutoHeight()
+																.Padding(10.f, 0.f, 10.f, 6.f)
+																[
+																	SNew(STextBlock)
+																		.Text(FText::FromString(TEXT("Thumbnail (click to change)")))
+																]
+
+																+ SVerticalBox::Slot()
+																.AutoHeight()
+																.Padding(10.0f)
+																.HAlign(HAlign_Left) // prevents the row from stretching wide
+																[
+																	SNew(SButton)
+																		.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+																		.ContentPadding(0)
+																		.OnClicked(this, &FPakCreatorWindow::HandleThumbnailBrowseClicked)
+																		[
+																			SNew(SBox)
+																				.WidthOverride(180.f)
+																				.HeightOverride(180.f)
+																				[
+																					SNew(SBorder)
+																						.Padding(2.f)
+																						.BorderImage(FAppStyle::Get().GetBrush("ToolPanel.GroupBorder"))
+																						[
+																							SNew(SScaleBox)
+																								.Stretch(EStretch::ScaleToFit)
+																								[
+																									SNew(SImage)
+																										.Image(this, &FPakCreatorWindow::GetThumbnailPreviewBrush)
+																								]
+																						]
+																				]
+																		]
+																]
+														]
+												]
+
+											// Create .pak button
 											+ SVerticalBox::Slot()
 												.Padding(10.0f)
 												.AutoHeight()
@@ -590,6 +671,8 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.Text(CreatePakText)
 														]
 												]
+
+											// Log list (IMPORTANT: this must exist)
 											+ SVerticalBox::Slot()
 												.FillHeight(1.f)
 												.HAlign(HAlign_Fill)
@@ -600,11 +683,14 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog)
 														.ScrollbarVisibility(EVisibility::Hidden)
 												]
-										]
-								]
+										] // end RIGHT COLUMN
+								] // end TAB0 horizontal
+								// =========================================================
 
-							// === TAB 1: LAYOUTS (list + create/overwrite) ===
-							+ SWidgetSwitcher::Slot()
+								// =========================================================
+								// === TAB 1: LAYOUTS (list + create/overwrite)
+								// =========================================================
+							+SWidgetSwitcher::Slot()
 								[
 									SNew(SHorizontalBox)
 
@@ -615,16 +701,19 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 										.HAlign(HAlign_Fill)
 										[
 											SNew(SVerticalBox)
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("Layouts (Project/Mods/Layouts)")))
 												]
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f, 6.0f, 10.0f, 6.0f)
 												[
 													SNew(SHorizontalBox)
+
 														+ SHorizontalBox::Slot()
 														.FillWidth(1.f)
 														[
@@ -632,6 +721,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.HintText(FText::FromString(TEXT("Filter layouts by name")))
 																.OnTextChanged_Lambda([this](const FText& T) { FilterLayoutList(T.ToString()); })
 														]
+
 														+ SHorizontalBox::Slot()
 														.AutoWidth()
 														.Padding(6.f, 0, 0, 0)
@@ -643,6 +733,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																]
 														]
 												]
+
 											+ SVerticalBox::Slot()
 												.Padding(10.0f)
 												.FillHeight(1.f)
@@ -669,6 +760,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("Layout Name")))
 												]
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f, 6.0f, 10.0f, 6.0f)
@@ -684,6 +776,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("Plugin with Map Assets")))
 												]
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f, 6.0f)
@@ -711,11 +804,13 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 												[
 													SNew(STextBlock).Text(FText::FromString(TEXT("Map for the Layout")))
 												]
+
 												+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f)
 												[
 													SNew(SHorizontalBox)
+
 														+ SHorizontalBox::Slot()
 														.FillWidth(1.f)
 														[
@@ -723,6 +818,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																.IsReadOnly(true)
 																.HintText(FText::FromString(TEXT("Select a .umap")))
 														]
+
 														+ SHorizontalBox::Slot()
 														.AutoWidth()
 														[
@@ -733,6 +829,7 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 																]
 														]
 												]
+
 											+ SVerticalBox::Slot()
 												.AutoHeight()
 												.Padding(10.0f)
@@ -746,19 +843,20 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 														]
 												]
 
-											// --- Layout Log (same spot as Package Mod) --- // NEW
-											+ SVerticalBox::Slot() // NEW
-												.FillHeight(1.f)    // NEW
-												.HAlign(HAlign_Fill)// NEW
-												[                   // NEW
-													SAssignNew(LayoutLogListWidget, SListView<TSharedPtr<FStringEntry>>) // NEW
-														.ListItemsSource(&LogEntries)    // NEW
-														.SelectionMode(ESelectionMode::Type::None) // NEW
-														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog) // NEW
-														.ScrollbarVisibility(EVisibility::Hidden) // NEW
-												]                   // NEW
+											// --- Layout Log (same spot as Package Mod) ---
+											+ SVerticalBox::Slot()
+												.FillHeight(1.f)
+												.HAlign(HAlign_Fill)
+												[
+													SAssignNew(LayoutLogListWidget, SListView<TSharedPtr<FStringEntry>>)
+														.ListItemsSource(&LogEntries)
+														.SelectionMode(ESelectionMode::Type::None)
+														.OnGenerateRow(this, &FPakCreatorWindow::OnGenerateRowForLog)
+														.ScrollbarVisibility(EVisibility::Hidden)
+												]
 										]
 								]
+							// =========================================================
 						]
 				]
 		];
@@ -796,8 +894,12 @@ TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& Sp
 	OutputProject = FPaths::ConvertRelativePathToFull(OutputProject);
 
 	PopulatePluginList(FPaths::ProjectPluginsDir());
+	RefreshThumbnailPreviewBrush();
 
-	LogListWidget->RegisterActiveTimer(0.1f, FWidgetActiveTimerDelegate::CreateSP(this, &FPakCreatorWindow::RefreshLog));
+	if (LogListWidget.IsValid())
+	{
+		LogListWidget->RegisterActiveTimer(0.1f, FWidgetActiveTimerDelegate::CreateSP(this, &FPakCreatorWindow::RefreshLog));
+	}
 
 	return PluginTab;
 }
@@ -2232,6 +2334,349 @@ void FPakCreatorWindow::OnReleaseNameCommitted(const FText& InText, const ETextC
 		);
 
 		GConfig->Flush(false, GEditorPerProjectIni);
+	}
+}
+
+EVisibility FPakCreatorWindow::GetThumbnailVisibility() const
+{
+	if (!PluginListWidget.IsValid())
+	{
+		return EVisibility::Collapsed;
+	}
+
+	const TArray<TSharedPtr<FStringEntry>> SelectedItems = PluginListWidget->GetSelectedItems();
+	if (SelectedItems.Num() == 0 || !SelectedItems[0].IsValid())
+	{
+		return EVisibility::Collapsed;
+	}
+
+	return EVisibility::Visible;
+}
+
+const FSlateBrush* FPakCreatorWindow::GetThumbnailPreviewBrush() const
+{
+	return ThumbnailPreviewBrush.IsValid()
+		? ThumbnailPreviewBrush.Get()
+		: FAppStyle::Get().GetBrush("Icons.Warning"); // fallback
+}
+
+static UTexture2D* LoadPngToTexture2D_Editor(const FString& FilePath)
+{
+	TArray<uint8> PngData;
+	if (!FFileHelper::LoadFileToArray(PngData, *FilePath))
+	{
+		return nullptr;
+	}
+
+	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>("ImageWrapper");
+	TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+	if (!Wrapper.IsValid() || !Wrapper->SetCompressed(PngData.GetData(), PngData.Num()))
+	{
+		return nullptr;
+	}
+
+	TArray<uint8> RawBGRA;
+	if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, RawBGRA))
+	{
+		return nullptr;
+	}
+
+	const int32 W = Wrapper->GetWidth();
+	const int32 H = Wrapper->GetHeight();
+	if (W <= 0 || H <= 0)
+	{
+		return nullptr;
+	}
+
+	UTexture2D* Tex = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
+	if (!Tex)
+	{
+		return nullptr;
+	}
+
+#if WITH_EDITORONLY_DATA
+	Tex->MipGenSettings = TMGS_NoMipmaps;
+#endif
+	Tex->SRGB = true;
+
+	void* MipData = Tex->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+	FMemory::Memcpy(MipData, RawBGRA.GetData(), RawBGRA.Num());
+	Tex->GetPlatformData()->Mips[0].BulkData.Unlock();
+
+	Tex->UpdateResource();
+	return Tex;
+}
+
+void FPakCreatorWindow::RefreshThumbnailPreviewBrush()
+{
+	FString PreviewPath;
+
+	// 1) If user picked an override, show that
+	if (!SelectedThumbnailPath.IsEmpty() && FPaths::FileExists(SelectedThumbnailPath))
+	{
+		PreviewPath = SelectedThumbnailPath;
+	}
+	else
+	{
+		// 2) Otherwise show the selected plugin's thumbnail
+		if (PluginListWidget.IsValid())
+		{
+			const TArray<TSharedPtr<FStringEntry>> SelectedItems = PluginListWidget->GetSelectedItems();
+			if (SelectedItems.Num() > 0 && SelectedItems[0].IsValid())
+			{
+				const FString PluginName = SelectedItems[0]->PluginPath;
+				const FString PluginDir = FPaths::Combine(FPaths::ProjectPluginsDir(), PluginName);
+
+				FString ThumbName = TEXT("Thumbnail.png");
+
+				const FString ModInfoPath = FPaths::Combine(PluginDir, TEXT("modinfo.json"));
+				FString JsonText;
+				if (FPaths::FileExists(ModInfoPath) && FFileHelper::LoadFileToString(JsonText, *ModInfoPath))
+				{
+					TSharedPtr<FJsonObject> Root;
+					const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+					if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+					{
+						FString FromJson;
+						if (Root->TryGetStringField(TEXT("Thumbnail"), FromJson))
+						{
+							FromJson = FromJson.TrimStartAndEnd();
+							if (!FromJson.IsEmpty())
+							{
+								ThumbName = FromJson;
+							}
+						}
+					}
+				}
+
+				FString Candidate = FPaths::Combine(PluginDir, ThumbName);
+				if (!FPaths::FileExists(Candidate))
+				{
+					const FString Alt = FPaths::Combine(PluginDir, TEXT("Config"), ThumbName);
+					if (FPaths::FileExists(Alt))
+					{
+						Candidate = Alt;
+					}
+				}
+
+				if (FPaths::FileExists(Candidate))
+				{
+					PreviewPath = Candidate;
+				}
+			}
+		}
+	}
+
+	// Clear old preview texture (avoid leaking roots)
+	if (ThumbnailPreviewTexture)
+	{
+		ThumbnailPreviewTexture->RemoveFromRoot();
+		ThumbnailPreviewTexture = nullptr;
+	}
+
+	if (PreviewPath.IsEmpty())
+	{
+		ThumbnailPreviewBrush.Reset();
+		return;
+	}
+
+	ThumbnailPreviewTexture = LoadPngToTexture2D_Editor(PreviewPath);
+	if (!ThumbnailPreviewTexture)
+	{
+		ThumbnailPreviewBrush.Reset();
+		return;
+	}
+
+	ThumbnailPreviewTexture->AddToRoot();
+
+	// Build a brush that uses the texture
+	TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+	Brush->SetResourceObject(ThumbnailPreviewTexture);
+	Brush->ImageSize = FVector2D(180.f, 180.f);
+
+	ThumbnailPreviewBrush = Brush;
+}
+
+void FPakCreatorWindow::OnPluginSelectionChanged(
+	TSharedPtr<FStringEntry> Item,
+	ESelectInfo::Type SelectInfo)
+{
+	// Clear manual override when switching plugins
+	SelectedThumbnailPath.Empty();
+
+	RefreshThumbnailPreviewBrush();
+}
+
+FReply FPakCreatorWindow::HandleThumbnailBrowseClicked()
+{
+	IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
+	if (!DesktopPlatform)
+		return FReply::Handled();
+
+	// Parent window handle (same pattern you use elsewhere)
+	TSharedPtr<SWindow> ParentWindow = FSlateApplication::Get().FindWidgetWindow(CreateButton.ToSharedRef());
+	void* ParentWindowHandle =
+		(ParentWindow.IsValid() && ParentWindow->GetNativeWindow().IsValid())
+		? ParentWindow->GetNativeWindow()->GetOSWindowHandle()
+		: nullptr;
+
+	TArray<FString> Files;
+	const bool bOk = DesktopPlatform->SaveFileDialog(
+		ParentWindowHandle,
+		TEXT("Select Thumbnail"),
+		FPaths::ProjectDir(),
+		TEXT("Thumbnail.png"),
+		TEXT("PNG Image (*.png)|*.png"),
+		EFileDialogFlags::None,
+		Files
+	);
+
+	if (!bOk || Files.Num() == 0)
+		return FReply::Handled();
+
+	FString Error;
+	if (!ValidateThumbnailImage(Files[0], Error))
+	{
+		AddLogMessage(FString::Printf(TEXT("Thumbnail Error: %s"), *Error));
+		return FReply::Handled();
+	}
+
+	SelectedThumbnailPath = Files[0];
+	ApplyThumbnailToSelectedPlugins(SelectedThumbnailPath);
+	RefreshThumbnailPreviewBrush();
+
+	// Refresh textbox display
+	if (ThumbnailPathInput.IsValid())
+	{
+		ThumbnailPathInput->SetText(GetCurrentThumbnailPath());
+	}
+
+	AddLogMessage(TEXT("Thumbnail updated for selected plugin(s)."));
+	return FReply::Handled();
+}
+
+FReply FPakCreatorWindow::HandleClearThumbnailClicked()
+{
+	SelectedThumbnailPath.Empty();
+	RefreshThumbnailPreviewBrush();
+
+	if (ThumbnailPathInput.IsValid())
+	{
+		ThumbnailPathInput->SetText(GetCurrentThumbnailPath());
+	}
+
+	AddLogMessage(TEXT("Thumbnail override cleared (does not restore file automatically)."));
+	return FReply::Handled();
+}
+
+FText FPakCreatorWindow::GetCurrentThumbnailPath() const
+{
+	return SelectedThumbnailPath.IsEmpty()
+		? FText::FromString(TEXT("Using plugin thumbnail"))
+		: FText::FromString(SelectedThumbnailPath);
+}
+
+bool FPakCreatorWindow::ValidateThumbnailImage(const FString& FilePath, FString& OutError) const
+{
+	TArray<uint8> Data;
+	if (!FFileHelper::LoadFileToArray(Data, *FilePath))
+	{
+		OutError = TEXT("Failed to read image file.");
+		return false;
+	}
+
+	IImageWrapperModule& ImageWrapperModule =
+		FModuleManager::LoadModuleChecked<IImageWrapperModule>("ImageWrapper");
+
+	TSharedPtr<IImageWrapper> Wrapper =
+		ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+
+	if (!Wrapper.IsValid() || !Wrapper->SetCompressed(Data.GetData(), Data.Num()))
+	{
+		OutError = TEXT("Invalid PNG file.");
+		return false;
+	}
+
+	const int32 W = Wrapper->GetWidth();
+	const int32 H = Wrapper->GetHeight();
+
+	if (W != H)
+	{
+		OutError = TEXT("Thumbnail must be square.");
+		return false;
+	}
+
+	// Allow any square size, but keep some sane limits
+	const int32 MinSize = 256;
+	const int32 MaxSize = 8192;
+
+	if (W < MinSize || W > MaxSize)
+	{
+		OutError = FString::Printf(TEXT("Thumbnail must be between %d and %d pixels (square)."), MinSize, MaxSize);
+		return false;
+	}
+
+
+	return true;
+}
+
+void FPakCreatorWindow::ApplyThumbnailToSelectedPlugins(const FString& SourceFile)
+{
+	if (!PluginListWidget.IsValid())
+	{
+		AddLogMessage(TEXT("Thumbnail Error: Plugin list not valid."));
+		return;
+	}
+
+	const TArray<TSharedPtr<FStringEntry>> SelectedItems = PluginListWidget->GetSelectedItems();
+	if (SelectedItems.Num() == 0)
+	{
+		AddLogMessage(TEXT("Thumbnail Error: No plugin selected."));
+		return;
+	}
+
+	for (const TSharedPtr<FStringEntry>& PluginEntry : SelectedItems)
+	{
+		if (!PluginEntry.IsValid())
+			continue;
+
+		const FString PluginName = PluginEntry->PluginPath;
+		const FString PluginDir = FPaths::Combine(FPaths::ProjectPluginsDir(), PluginName);
+
+		// Default destination filename
+		FString DestFileName = TEXT("Thumbnail.png");
+
+		// Respect Thumbnail field in modinfo.json if present
+		const FString ModInfoPath = FPaths::Combine(PluginDir, TEXT("modinfo.json"));
+		FString JsonText;
+		if (FPaths::FileExists(ModInfoPath) && FFileHelper::LoadFileToString(JsonText, *ModInfoPath))
+		{
+			TSharedPtr<FJsonObject> Root;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+			if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+			{
+				FString FromJson;
+				if (Root->TryGetStringField(TEXT("Thumbnail"), FromJson))
+				{
+					FromJson = FromJson.TrimStartAndEnd();
+					if (!FromJson.IsEmpty())
+					{
+						DestFileName = FromJson;
+					}
+				}
+			}
+		}
+
+		const FString DestPath = FPaths::Combine(PluginDir, DestFileName);
+
+		if (IFileManager::Get().Copy(*DestPath, *SourceFile, /*bReplace=*/true, /*bEvenIfReadOnly=*/true) == COPY_OK)
+		{
+			AddLogMessage(FString::Printf(TEXT("Thumbnail copied to %s"), *DestPath));
+		}
+		else
+		{
+			AddLogMessage(FString::Printf(TEXT("Thumbnail Error: Failed to copy to %s"), *DestPath));
+		}
 	}
 }
 
