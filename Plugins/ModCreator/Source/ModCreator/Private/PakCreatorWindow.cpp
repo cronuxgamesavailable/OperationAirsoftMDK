@@ -921,6 +921,7 @@ void FPakCreatorWindow::BuildModelTypeOptions()
 		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Stock")));
 		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Trigger")));
 		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Tank")));
+		AttachmentTypeOptions.Add(MakeShared<FString>(TEXT("Rifle_Engine")));
 	}
 
 	if (ClothingTypeOptions.Num() == 0)

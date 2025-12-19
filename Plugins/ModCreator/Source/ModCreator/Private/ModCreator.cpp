@@ -186,7 +186,10 @@ void FModCreatorModule::CheckForMdkUpdate()
     LocalVersion = LocalVersion.TrimStartAndEnd();
 
     // 2. Remote version file on GitHub (CHANGE THIS TO YOUR REAL URL)
-    const FString RemoteVersionUrl = TEXT("https://raw.githubusercontent.com/cronuxgamesavailable/OperationAirsoftMDK/Plugin/Plugins/ModCreator/Patch/MDKVersion.txt");
+    const FString RemoteVersionUrl = FString::Printf(
+        TEXT("https://raw.githubusercontent.com/cronuxgamesavailable/OperationAirsoftMDK/Main-Plugin/Plugins/ModCreator/Patch/MDKVersion.txt?ts=%lld"),
+        FDateTime::UtcNow().ToUnixTimestamp()
+    );
     const FString GitHubPageUrl = TEXT("https://github.com/cronuxgamesavailable/OperationAirsoftMDK");
 
     auto RunPatch = []()
@@ -210,7 +213,12 @@ void FModCreatorModule::CheckForMdkUpdate()
                 return;
             }
 
-            FString RemoteVersion = Resp->GetContentAsString().TrimStartAndEnd();
+            FString RemoteVersion = Resp->GetContentAsString();
+            RemoteVersion.TrimStartAndEndInline();
+            RemoteVersion.ReplaceInline(TEXT("\r"), TEXT(""));
+            RemoteVersion.ReplaceInline(TEXT("\n"), TEXT(""));
+
+            UE_LOG(LogTemp, Warning, TEXT("MDK remote version returned: '%s' (local: '%s')"), *RemoteVersion, *LocalVersion);
 
             if (RemoteVersion.Equals(LocalVersion, ESearchCase::IgnoreCase))
             {
