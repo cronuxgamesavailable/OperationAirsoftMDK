@@ -1,6 +1,6 @@
 # Operation Airsoft MDK (Mod Development Kit) 🎯
 
-Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.5.6 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
+Welcome to the official **Operation Airsoft Mod Development Kit (MDK)** v1.5.7 – a powerful toolset for creating, describing, and exporting mods for **Operation Airsoft**, an airsoft first-person shooter powered by Unreal Engine 5.
 
 > ⚠️ **Note:** This repository contains *the plugin and templates*.  
 > You can integrate it into your own Unreal Engine 5.4 project to enable mod packaging features.  
