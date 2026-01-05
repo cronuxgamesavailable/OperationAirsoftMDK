@@ -187,7 +187,7 @@ void FModCreatorModule::CheckForMdkUpdate()
 
     // 2. Remote version file on GitHub (CHANGE THIS TO YOUR REAL URL)
     const FString RemoteVersionUrl = FString::Printf(
-        TEXT("https://raw.githubusercontent.com/cronuxgamesavailable/OperationAirsoftMDK/Main-Plugin/Plugins/ModCreator/Patch/MDKVersion.txt?ts=%lld"),
+        TEXT("https://api.github.com/repos/cronuxgamesavailable/OperationAirsoftMDK/releases/latest?ts=%lld"),
         FDateTime::UtcNow().ToUnixTimestamp()
     );
     const FString GitHubPageUrl = TEXT("https://github.com/cronuxgamesavailable/OperationAirsoftMDK");
@@ -203,6 +203,7 @@ void FModCreatorModule::CheckForMdkUpdate()
     Request->SetURL(RemoteVersionUrl);
     Request->SetVerb(TEXT("GET"));
     Request->SetHeader(TEXT("User-Agent"), TEXT("UnrealEngine-ModCreator"));
+    Request->SetHeader(TEXT("Accept"), TEXT("application/vnd.github+json"));
 
     Request->OnProcessRequestComplete().BindLambda(
         [LocalVersion, GitHubPageUrl, RunPatch](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bSucceeded)
@@ -213,10 +214,26 @@ void FModCreatorModule::CheckForMdkUpdate()
                 return;
             }
 
-            FString RemoteVersion = Resp->GetContentAsString();
+            FString RemoteVersion;
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Resp->GetContentAsString());
+            if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+            {
+                RunPatch();
+                return;
+            }
+
+            // GitHub Release title is "name"
+            RemoteVersion = Root->GetStringField(TEXT("name"));
             RemoteVersion.TrimStartAndEndInline();
-            RemoteVersion.ReplaceInline(TEXT("\r"), TEXT(""));
-            RemoteVersion.ReplaceInline(TEXT("\n"), TEXT(""));
+
+            // Fallback: if you ever leave Release title blank, use tag_name
+            if (RemoteVersion.IsEmpty() && Root->HasField(TEXT("tag_name")))
+            {
+                RemoteVersion = Root->GetStringField(TEXT("tag_name"));
+                RemoteVersion.TrimStartAndEndInline();
+            }
 
             UE_LOG(LogTemp, Warning, TEXT("MDK remote version returned: '%s' (local: '%s')"), *RemoteVersion, *LocalVersion);
 
