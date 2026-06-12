@@ -1,5 +1,19 @@
 {
 	"RemapUnityFiles": 
 	{
+		"Module.ModCreator.cpp.obj": [
+			"PerModuleInline.gen.cpp.obj",
+			"AutomatedPakParams.cpp.obj",
+			"ModCreator.cpp.obj",
+			"ModCreatorCommands.cpp.obj",
+			"ModCreatorCreateWindow.cpp.obj",
+			"ModCreatorStyle.cpp.obj",
+			"PakCreatorCommands.cpp.obj",
+			"PakCreatorLog.cpp.obj",
+			"PakCreatorStyle.cpp.obj",
+			"PakCreatorWindow.cpp.obj",
+			"PakHelperFunctions.cpp.obj",
+			"UATProcess.cpp.obj"
+		]
 	}
 }

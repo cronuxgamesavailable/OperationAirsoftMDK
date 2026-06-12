@@ -6,4 +6,5 @@
   "Assets": [],
   "LayoutsEnabled": true,
   "BuildRequirements": "CopyContent"
+  "ModType": "Map"
 }

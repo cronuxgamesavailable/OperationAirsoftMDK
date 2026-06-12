@@ -834,7 +834,6 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
 
     TSharedRef<SWrapBox> Wrap =
         SNew(SWrapBox)
-        .UseAllottedWidth(true)
         .InnerSlotPadding(FVector2D(12.f, 12.f));
 
     for (int32 i = 0; i < TemplateItems.Num(); ++i)

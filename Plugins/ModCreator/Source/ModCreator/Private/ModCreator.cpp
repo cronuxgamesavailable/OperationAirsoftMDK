@@ -235,7 +235,7 @@ void FModCreatorModule::CheckForMdkUpdate()
                 RemoteVersion.TrimStartAndEndInline();
             }
 
-            UE_LOG(LogTemp, Warning, TEXT("MDK remote version returned: '%s' (local: '%s')"), *RemoteVersion, *LocalVersion);
+            UE_LOG(LogTemp, Log, TEXT("MDK remote version returned: '%s' (local: '%s')"), *RemoteVersion, *LocalVersion);
 
             if (RemoteVersion.Equals(LocalVersion, ESearchCase::IgnoreCase))
             {

@@ -59,6 +59,7 @@
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\InputCore\UnrealEditor-InputCore.lib"
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\Settings\UnrealEditor-Settings.lib"
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\HTTP\UnrealEditor-HTTP.lib"
+"..\Intermediate\Build\Win64\x64\UnrealEditor\Development\ImageWrapper\UnrealEditor-ImageWrapper.lib"
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\Core\UnrealEditor-Core.lib"
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\CoreUObject\UnrealEditor-CoreUObject.lib"
 "..\Intermediate\Build\Win64\x64\UnrealEditor\Development\Engine\UnrealEditor-Engine.lib"
