@@ -287,11 +287,18 @@ FText FPakCreatorWindow::GetCurrentPlatform() const
 
 TSharedRef<SDockTab> FPakCreatorWindow::OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs)
 {
+	PlatformsSource.Empty();
+
 	for (const FString& PlatformName : FAutomatedPakParams::ValidPlatformNames)
 	{
-		PlatformsSource.Add(MakeShared<FString>(PlatformName));
+		if (PlatformName.Equals(TEXT("Win64"), ESearchCase::IgnoreCase))
+		{
+			PlatformsSource.Add(MakeShared<FString>(PlatformName));
+			break;
+		}
 	}
-	check(PlatformsSource.Num() == FAutomatedPakParams::ValidPlatformNames.Num());
+
+	check(PlatformsSource.Num() > 0);
 
 	FProjectStatus ProjectStatus;
 	const bool bHasCode = IProjectManager::Get().QueryStatusForCurrentProject(ProjectStatus) && ProjectStatus.bCodeBasedProject;

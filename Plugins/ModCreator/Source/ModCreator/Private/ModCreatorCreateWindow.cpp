@@ -28,6 +28,7 @@
 #include "Misc/PackageName.h"
 #include "Engine/UserDefinedEnum.h"
 #include "UnrealEdMisc.h"
+#include "Widgets/Layout/SUniformGridPanel.h"
 
 // --- NEW: helpers for map/attachment selection & enum read ---
 #include "UObject/UObjectGlobals.h"
@@ -827,53 +828,55 @@ void SModCreatorCreatePanel::ScanTemplates()
 
 TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
 {
-    // Uniform tile sizing (use the dimensions you liked)
     const float TileW = 180.f;
     const float TileH = 180.f;
     const FVector2D ThumbSize(140.f, 140.f);
 
-    TSharedRef<SWrapBox> Wrap =
-        SNew(SWrapBox)
-        .InnerSlotPadding(FVector2D(12.f, 12.f));
+    TSharedRef<SUniformGridPanel> Grid =
+        SNew(SUniformGridPanel)
+        .SlotPadding(FMargin(12.f));
 
     for (int32 i = 0; i < TemplateItems.Num(); ++i)
     {
         const FTemplateItem& Item = TemplateItems[i];
 
-        Wrap->AddSlot()
+        const int32 Column = i % 5;
+        const int32 Row = i / 5;
+
+        Grid->AddSlot(Column, Row)
             [
-                // A fixed-size tile that behaves like a button
                 SNew(SButton)
                     .OnClicked_Lambda([this, i]()
                         {
                             SetSelected(i);
                             return FReply::Handled();
                         })
-                    .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("SimpleButton")) // flat-looking
+                    .ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FButtonStyle>("SimpleButton"))
                     .ContentPadding(0)
                     [
                         SNew(SBox)
                             .WidthOverride(TileW)
                             .HeightOverride(TileH)
                             [
-                                // Outer border + selection tint
                                 SNew(SBorder)
                                     .Padding(8)
                                     .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
                                     .BorderBackgroundColor_Lambda([this, i]()
                                         {
-                                            // Darker blue-gray tint when selected
                                             return (SelectedIndex == i)
-                                                ? FLinearColor(0.05f, 0.15f, 0.3f, 0.6f)   // darker & more opaque
+                                                ? FLinearColor(0.05f, 0.15f, 0.3f, 0.6f)
                                                 : FLinearColor::Transparent;
                                         })
                                     [
                                         SNew(SVerticalBox)
 
-                                            // Thumbnail
-                                            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+                                            + SVerticalBox::Slot()
+                                            .AutoHeight()
+                                            .HAlign(HAlign_Center)
                                             [
-                                                SNew(SBox).WidthOverride(ThumbSize.X).HeightOverride(ThumbSize.Y)
+                                                SNew(SBox)
+                                                    .WidthOverride(ThumbSize.X)
+                                                    .HeightOverride(ThumbSize.Y)
                                                     [
                                                         Item.IconBrush.IsValid()
                                                             ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Item.IconBrush.Get()))
@@ -881,8 +884,10 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
                                                     ]
                                             ]
 
-                                        // Name
-                                        + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 0).HAlign(HAlign_Center)
+                                        + SVerticalBox::Slot()
+                                            .AutoHeight()
+                                            .Padding(0, 6, 0, 0)
+                                            .HAlign(HAlign_Center)
                                             [
                                                 SNew(STextBlock)
                                                     .Text(FText::FromString(Item.Name))
@@ -895,7 +900,7 @@ TSharedRef<SWidget> SModCreatorCreatePanel::BuildTemplatesGrid()
             ];
     }
 
-    return Wrap;
+    return Grid;
 }
 
 TSharedRef<SWidget> SModCreatorCreatePanel::BuildFooter()
